@@ -1,0 +1,44 @@
+# REUSABLE (preview). Merges an ffmpeg-build pull request (update.yml or fetch-update.yml with `automerge: true`) once
+# its CI passes, without depending on repository settings (auto-merge, branch protection, required checks). Call it
+# from a workflow triggered by the CI finishing:
+#
+#   on:
+#     workflow_run:
+#       workflows: [ci]          # the CI workflows' names
+#       types: [completed]
+#
+# It merges only the open PR whose branch is the run's, starts with ffmpeg-build/, carries the ffmpeg-build:automerge
+# label, and whose head is still the commit that run tested (a newer push is never merged untested).
+name: automerge
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      # the event's fields reach the script through env, never its text
+      BRANCH: ${{ github.event.workflow_run.head_branch }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      LABEL: ffmpeg-build:automerge
+    steps:
+      - name: merge the labelled pull request the run tested
+        run: |
+          case "${BRANCH}" in ffmpeg-build/*) ;; *) echo "${BRANCH} isn't an ffmpeg-build branch"; exit 0 ;; esac
+          found="$(gh pr list --head "${BRANCH}" --state open --label "${LABEL}" --json number,headRefOid --jq '.[] | "\(.number) \(.headRefOid)"' | head -1)"
+          if [ -z "${found}" ]; then echo "no open pull request on ${BRANCH} labelled ${LABEL}"; exit 0; fi
+          read -r number head <<< "${found}"
+          if [ "${head}" != "${SHA}" ]; then echo "#${number} moved on to ${head} since the run tested ${SHA}; its own run decides"; exit 0; fi
+          gh pr merge "${number}" --squash --match-head-commit "${SHA}"
+          echo "merged #${number} (${SHA})" >> "$GITHUB_STEP_SUMMARY"

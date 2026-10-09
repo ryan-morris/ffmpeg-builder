@@ -1,13 +1,21 @@
 # Nightly FFmpeg support check (the engine's own): keeps ffmpeg/<major>.yml's releases equal to FFmpeg's release tags,
 # and reports options a new FFmpeg release adds, removes or reclassifies, and new majors. It opens or refreshes one
-# pull request: the release lists are data and can merge once CI passes; anything else in the report is for a person.
+# pull request when ffmpeg/ changed: the release lists are data and can merge once CI passes; anything else in the
+# report is for a person. A report with findings but no data change refreshes an open pull request's text, or else
+# stays in the run summary as a warning.
+#
+# Pushes made with GITHUB_TOKEN start no workflows, so after one it dispatches ci.yml on the branch (actions: write).
+# An optional SUPPORT_TOKEN secret (a fine-grained token with contents and pull-requests write) is used instead when
+# it is set; its push starts CI by itself.
 name: ffmpeg-support
 on:
   schedule:
     - cron: '37 3 * * *'
   workflow_dispatch:
 
+# actions: write lets GITHUB_TOKEN dispatch the PR's CI
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -16,10 +24,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      GH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ secrets.SUPPORT_TOKEN || github.token }}
       BRANCH: ffmpeg-build/ffmpeg-support
+      HAS_TOKEN: ${{ secrets.SUPPORT_TOKEN != '' }}
+      DISPATCH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.SUPPORT_TOKEN || github.token }}
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -30,19 +42,35 @@ jobs:
           cat "${RUNNER_TEMP}/support.md" >> "$GITHUB_STEP_SUMMARY"
       - name: open or refresh the pull request
         run: |
-          if git diff --quiet -- ffmpeg/ && ! grep -qE '\*\*(new in|gone from|licence class|New FFmpeg major)' "${RUNNER_TEMP}/support.md"; then
-            echo "FFmpeg support is current" >> "$GITHUB_STEP_SUMMARY"
+          findings=false
+          if grep -qE '\*\*(new in|gone from|licence class|New FFmpeg major)' "${RUNNER_TEMP}/support.md"; then findings=true; fi
+          open="$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')"
+          title="ffmpeg: FFmpeg support check"
+          if git diff --quiet -- ffmpeg/; then
+            if [ "${findings}" = false ]; then
+              echo "FFmpeg support is current" >> "$GITHUB_STEP_SUMMARY"
+            elif [ -n "${open}" ]; then
+              gh pr edit "${BRANCH}" --title "${title}" --body-file "${RUNNER_TEMP}/support.md"
+            else
+              echo "::warning::the FFmpeg support check has findings for a person (see the run summary); no data changed, so no pull request"
+            fi
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "${BRANCH}"
           git add -- ffmpeg/
-          git commit --quiet --allow-empty -m "ffmpeg: support check"
+          git commit --quiet -m "ffmpeg: support check"
+          # the same data as the open pull request already has: refresh its text only, without a new push
+          if git fetch --quiet origin "${BRANCH}" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD -- ffmpeg/ && [ -n "${open}" ]; then
+            gh pr edit "${BRANCH}" --title "${title}" --body-file "${RUNNER_TEMP}/support.md"
+            exit 0
+          fi
           git push --force origin "${BRANCH}"
-          title="ffmpeg: FFmpeg support check"
-          if [ -n "$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')" ]; then
+          if [ -n "${open}" ]; then
             gh pr edit "${BRANCH}" --title "${title}" --body-file "${RUNNER_TEMP}/support.md"
           else
             gh pr create --head "${BRANCH}" --title "${title}" --body-file "${RUNNER_TEMP}/support.md"
           fi
+          # GITHUB_TOKEN's push starts no CI, but it may dispatch it; SUPPORT_TOKEN's push starts it by itself
+          if [ "${HAS_TOKEN}" != true ]; then GH_TOKEN="${DISPATCH_TOKEN}" gh workflow run ci.yml --ref "${BRANCH}"; fi

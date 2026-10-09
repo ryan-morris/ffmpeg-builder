@@ -7,11 +7,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { bundle } from '../src/bundle.ts';
-import { bundleApple, appleSets } from '../src/bundle-apple.ts';
+import { appleSets, appleSlicesRecord, bundleApple } from '../src/bundle-apple.ts';
 import { loadEngineData } from '../src/engine-data.ts';
 import { formatFolderLock, type FolderLock } from '../src/lockfile.ts';
 import { parseManifest, type Manifest } from '../src/manifest.ts';
 import { packageRoot } from '../src/paths.ts';
+import { runFolderCheck } from '../src/commands/folder.ts';
 import { changesSince, planReleases, publishedTargets, removals } from '../src/release.ts';
 import { artifactName, loadFolder, type Folder } from '../src/targets.ts';
 import { readTarGz } from '../src/untar.ts';
@@ -88,7 +89,16 @@ describe('what an Apple release publishes', () => {
     const previous: Manifest = { release: '9.0.2.0', ffmpeg: '9.0.2', build: '0', engine: ios.facts.engine, targets: [entry(ios), entry(linux)], sources: { name: 's', sha256: '0'.repeat(64) } };
     expect(changesSince(rel, previous)).toEqual([]);
     const lost: Manifest = { ...previous, targets: [{ ...entry(ios), components: { ...ios.facts.components, aom: '3.15.1' } }, entry(linux)] };
-    expect(removals(rel, lost, folder)).toEqual(['ios-lgplv3: aom was in 9.0.2.0 and is gone now; if that is intended, add allow-removal: [aom] to the target']);
+    expect(removals(rel, lost, folder)).toEqual([
+      'ios-lgplv3: aom was in 9.0.2.0 and is gone now; if that is intended, add allow-removal: [aom] to ios-arm64-lgplv3, ios-sim-arm64-lgplv3, maccatalyst-arm64-lgplv3, maccatalyst-x64-lgplv3 (the slice targets of ios-lgplv3)',
+    ]);
+    // the last release recorded its slices: opus dropped from the simulator only is caught, though the union kept it
+    const slices = { 'ios-lgplv3': Object.fromEntries(SLICES.map((s) => [s, { dav1d: '1.5.4', opus: '1.6.1' }])) };
+    expect(removals(rel, previous, folder, slices)).toEqual([
+      'ios-lgplv3: opus was in its ios-sim-arm64 slice in 9.0.2.0 and is gone now; if that is intended, add allow-removal: [opus] to ios-sim-arm64-lgplv3 (the slice targets of ios-lgplv3)',
+    ]);
+    const allowed = builtFolder(FOLDER.replace('ios-sim-arm64-lgplv3: { platform: ios-sim-arm64, license: lgplv3, ffmpeg: 9, with: [dav1d] }', 'ios-sim-arm64-lgplv3: { platform: ios-sim-arm64, license: lgplv3, ffmpeg: 9, with: [dav1d], allow-removal: [opus] }'));
+    expect(removals(planReleases(allowed.folder, data, LOCK, packageRoot).releases[0]!, previous, allowed.folder, slices)).toEqual([]);
   });
 
   it('refuses a licence without all four slices, or with one twice', () => {
@@ -96,16 +106,40 @@ describe('what an Apple release publishes', () => {
     const rel = planReleases(three.folder, data, LOCK, packageRoot).releases[0]!;
     expect(() => appleSets(rel)).toThrow('lgplv3 has no maccatalyst-x64 target: an xcframework bundle needs ios-arm64, ios-sim-arm64, maccatalyst-arm64 and maccatalyst-x64');
   });
+
+  it('stops releases and check before anything is built, when a licence lacks a slice', () => {
+    const three = builtFolder(FOLDER.split('\n').filter((l) => !l.includes('maccatalyst-x64')).join('\n'));
+    expect(planReleases(three.folder, data, LOCK, packageRoot).errors).toEqual([
+      '9.0.2: lgplv3 has no maccatalyst-x64 target: an xcframework bundle needs ios-arm64, ios-sim-arm64, maccatalyst-arm64 and maccatalyst-x64 (it has ios-arm64-lgplv3, ios-sim-arm64-lgplv3, maccatalyst-arm64-lgplv3)',
+    ]);
+    const check = runFolderCheck(three.folder, data);
+    expect(check.exitCode).toBe(1);
+    expect(check.output).toContain('✗ lgplv3 has no maccatalyst-x64 target');
+    // a second ios-arm64 of the same licence is refused too
+    const twice = builtFolder(`${FOLDER}  extra-ios: { platform: ios-arm64, license: lgplv3, ffmpeg: 9, with: [dav1d] }\n`);
+    expect(runFolderCheck(twice.folder, data).output).toContain('lgplv3 has two ios-arm64 targets (ios-arm64-lgplv3, extra-ios)');
+    // another release group is its own bundle: three slices there are refused even with four here
+    const grouped = builtFolder(`${FOLDER}${SLICES.slice(1).map((p) => `  ${p}-dvr: { platform: ${p}, license: lgplv3, ffmpeg: 9, with: [dav1d], release-group: dvr }\n`).join('')}`);
+    expect(runFolderCheck(grouped.folder, data).output).toContain('dvr-9.0.2: lgplv3 has no ios-arm64 target');
+  });
 });
+
+/** What bundle --apple leaves in dist: the bundle and its .slices.json (a stand-in bundle; no Mac needed). */
+function appleBundled(dist: string, folder: Folder): void {
+  writeFileSync(join(dist, 'ffmpeg-9.0.2-ios-lgplv3.tar.gz'), tarGz([{ name: 'libavutil.xcframework/Info.plist', data: 'x' }]));
+  const rel = planReleases(folder, data, LOCK, packageRoot).releases[0]!;
+  const record = appleSlicesRecord(dist, 'ffmpeg-9.0.2-ios-lgplv3.tar.gz', appleSets(rel).get('lgplv3')!, rel.ffmpeg);
+  writeFileSync(join(dist, 'ffmpeg-9.0.2-ios-lgplv3.slices.json'), JSON.stringify(record));
+}
 
 describe('ffmpeg-build bundle, for a release with framework targets', () => {
   it('publishes the ios bundle for the slices, and keeps every slice\'s sources', async () => {
     const { dist, folder } = builtFolder();
-    writeFileSync(join(dist, 'ffmpeg-9.0.2-ios-lgplv3.tar.gz'), tarGz([{ name: 'libavutil.xcframework/Info.plist', data: 'x' }]));
+    appleBundled(dist, folder);
     const r = await bundle(folder, data, LOCK, { tag: '9.0.2.3', dist, engineRoot: packageRoot, repo: 'o/r' });
     expect(r.assets).toEqual([
       'ffmpeg-9.0.2-ios-lgplv3.tar.gz', 'ffmpeg-9.0.2-linux-x64-lgplv3.tar.gz', 'ffmpeg-9.0.2-linux-x64-lgplv3-dev.tar.gz',
-      'ffmpeg-9.0.2-sources.tar.gz', 'manifest.yml', 'SHA256SUMS',
+      'ffmpeg-9.0.2-ios-lgplv3.slices.json', 'ffmpeg-9.0.2-sources.tar.gz', 'manifest.yml', 'SHA256SUMS',
     ]);
     const m = parseManifest(readFileSync(join(dist, 'manifest.yml'), 'utf8'));
     const ios = m.targets.find((t) => t.name === 'ios-lgplv3')!;
@@ -124,6 +158,34 @@ describe('ffmpeg-build bundle, for a release with framework targets', () => {
     const { dist, folder } = builtFolder();
     await expect(bundle(folder, data, LOCK, { tag: '9.0.2.3', dist, engineRoot: packageRoot, repo: 'o/r' }))
       .rejects.toThrow('ffmpeg-9.0.2-ios-lgplv3.tar.gz (the lgplv3 xcframework bundle) isn\'t in');
+  });
+
+  it('refuses a stale ios bundle: a slice built again since bundle --apple, or no record of its slices', async () => {
+    const { dist, folder } = builtFolder();
+    appleBundled(dist, folder);
+    writeFileSync(join(dist, 'ffmpeg-9.0.2-ios-sim-arm64-lgplv3.tar.gz'), tarGz([{ name: 'THIRD-PARTY-NOTICES.txt', data: 'built again' }]));
+    await expect(bundle(folder, data, LOCK, { tag: '9.0.2.3', dist, engineRoot: packageRoot, repo: 'o/r' }))
+      .rejects.toThrow("ffmpeg-9.0.2-ios-lgplv3.tar.gz is stale: it wasn't made from the ffmpeg-9.0.2-ios-sim-arm64-lgplv3.tar.gz in");
+    rmSync(join(dist, 'ffmpeg-9.0.2-ios-lgplv3.slices.json'));
+    await expect(bundle(folder, data, LOCK, { tag: '9.0.2.3', dist, engineRoot: packageRoot, repo: 'o/r' }))
+      .rejects.toThrow("ffmpeg-9.0.2-ios-lgplv3.slices.json isn't in");
+  });
+
+  it("compares slice by slice with the last release's .slices.json", async () => {
+    const { dist, folder } = builtFolder();
+    appleBundled(dist, folder);
+    const rel = planReleases(folder, data, LOCK, packageRoot).releases[0]!;
+    const [ios, linux] = publishedTargets(rel);
+    gh.publish('9.0.2.0', [
+      { name: 'ios-lgplv3', platform: 'ios', components: ios!.facts.components },
+      { name: 'linux-x64-lgplv3', platform: 'linux-x64', components: linux!.facts.components },
+    ]);
+    // the last release's simulator slice had opus; this one's doesn't, though the union still has it
+    const record = JSON.parse(readFileSync(join(dist, 'ffmpeg-9.0.2-ios-lgplv3.slices.json'), 'utf8')) as { slices: Record<string, { components: Record<string, string> }> };
+    record.slices['ios-sim-arm64']!.components = { dav1d: '1.5.4', opus: '1.6.1' };
+    gh.releases.at(-1)!.files['ffmpeg-9.0.2-ios-lgplv3.slices.json'] = Buffer.from(JSON.stringify(record));
+    await expect(bundle(folder, data, LOCK, { tag: '9.0.2.1', dist, engineRoot: packageRoot, repo: 'o/r' }))
+      .rejects.toThrow('ios-lgplv3: opus was in its ios-sim-arm64 slice in 9.0.2.0 and is gone now');
   });
 });
 
@@ -177,7 +239,9 @@ describe.skipIf(!hasXcode)('bundle --apple on a Mac', () => {
       execFileSync('tar', ['-czf', join(dist, `${name}.tar.gz`), '-C', root, '.']);
     }
     const r = await bundleApple(folder, data, LOCK, { tag: '9.0.2.3', dist, engineRoot: packageRoot });
-    expect(r.assets).toEqual(['ffmpeg-9.0.2-ios-lgplv3.tar.gz']);
+    expect(r.assets).toEqual(['ffmpeg-9.0.2-ios-lgplv3.tar.gz', 'ffmpeg-9.0.2-ios-lgplv3.slices.json']);
+    const record = JSON.parse(readFileSync(join(dist, 'ffmpeg-9.0.2-ios-lgplv3.slices.json'), 'utf8')) as { slices: Record<string, { sha256: string }> };
+    for (const p of SLICES) expect(record.slices[p]!.sha256).toBe(sha(readFileSync(join(dist, `ffmpeg-9.0.2-${p}-lgplv3.tar.gz`))));
     const out = mkdtempSync(join(tmpdir(), 'ffmpeg-build-xcf-'));
     execFileSync('tar', ['-xzf', join(dist, 'ffmpeg-9.0.2-ios-lgplv3.tar.gz'), '-C', out]);
     for (const lib of ['libavutil', 'libavcodec']) {

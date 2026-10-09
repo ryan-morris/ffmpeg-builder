@@ -1,6 +1,7 @@
 # REUSABLE (preview). Keeps a folder's ffmpeg.lock current: runs `ffmpeg-build update`, and opens or refreshes one
 # pull request on the `ffmpeg-build/update` branch with the update summary as its body. The caller's own CI (the build
-# workflow with `publish: never`) checks the PR; with `automerge: true` it merges itself once that passes.
+# workflow with `publish: never`) checks the PR: dispatched on its branch when there is no token secret. With
+# `automerge: true` the PR is labelled, and the automerge workflow merges it once that CI passes.
 name: update
 
 on:
@@ -10,10 +11,15 @@ on:
         type: string
         default: .
       automerge:
+        description: label the PR ffmpeg-build:automerge, so the automerge workflow merges it once its CI passes
         type: boolean
         default: false
+      ci-workflow:
+        description: the CI workflow to dispatch on the PR's branch when no token secret is given (GITHUB_TOKEN's pushes start no CI); empty dispatches nothing
+        type: string
+        default: ci.yml
       engine:
-        description: ffmpeg-build version to run (default the one ffmpeg.lock records; "source" builds this repository)
+        description: ffmpeg-build to run, a version or a git/npm spec like github:owner/repo#ref (default the version ffmpeg.lock records; "source" builds this repository)
         type: string
         default: ''
     secrets:
@@ -21,7 +27,9 @@ on:
         description: a token whose pushes trigger CI (GITHUB_TOKEN's don't); falls back to GITHUB_TOKEN
         required: false
 
+# actions: write lets GITHUB_TOKEN dispatch the PR's CI; callers must grant it too
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -44,14 +52,27 @@ jobs:
         env:
           WANTED: ${{ inputs.engine }}
         run: |
-          if [ "${WANTED}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); exit 0; fi
-          npm install --global "ffmpeg-build@${WANTED:-$(sed -n 's/^engine: *//p' ffmpeg.lock | head -1)}"
+          ENGINE="${WANTED:-$(sed -n 's/^engine: *//p' ffmpeg.lock | head -1)}"
+          # "source": this repository is the engine. A git or npm spec (with : or /, e.g. github:owner/repo#ref) is packed
+          # first: npm install --global <git spec> skips the devDependencies its prepare build needs. Else an npm version.
+          case "${ENGINE}" in
+            source) (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link) ;;
+            *[:/]*)
+              tgz="$(npm pack --silent --pack-destination "${RUNNER_TEMP}" "${ENGINE}" | tail -1)"
+              [ -n "${tgz}" ] || { echo "::error::npm pack ${ENGINE} made no package"; exit 1; }
+              npm install --global "${RUNNER_TEMP}/${tgz}" ;;
+            *) npm install --global "ffmpeg-build@${ENGINE}" ;;
+          esac
       - name: update
         working-directory: ${{ inputs.folder }}
         run: ffmpeg-build update --summary "${RUNNER_TEMP}/pr.md"
       - name: open or refresh the pull request
         env:
           AUTOMERGE: ${{ inputs.automerge }}
+          CI_WORKFLOW: ${{ inputs.ci-workflow }}
+          HAS_TOKEN: ${{ secrets.token != '' }}
+          DISPATCH_TOKEN: ${{ github.token }}
+          LABEL: ffmpeg-build:automerge
           FOLDER: ${{ inputs.folder }}
         run: |
           if git diff --quiet -- "${FOLDER}/ffmpeg.lock"; then
@@ -70,4 +91,12 @@ jobs:
           else
             gh pr create --head "${BRANCH}" --title "${title}" --body-file "${RUNNER_TEMP}/pr.md"
           fi
-          if [ "${AUTOMERGE}" = "true" ]; then gh pr merge "${BRANCH}" --auto --squash; fi
+          # the PR's CI: a token's push starts it; GITHUB_TOKEN's pushes start nothing, but it may dispatch a run
+          if [ "${HAS_TOKEN}" != true ] && [ -n "${CI_WORKFLOW}" ]; then
+            GH_TOKEN="${DISPATCH_TOKEN}" gh workflow run "${CI_WORKFLOW}" --ref "${BRANCH}"
+          fi
+          # automerge: the label the automerge workflow looks for once the PR's CI passes (no repository settings needed)
+          if [ "${AUTOMERGE}" = true ]; then
+            gh label create "${LABEL}" --force --color 0e8a16 --description "ffmpeg-build merges this PR once its CI passes"
+            gh pr edit "${BRANCH}" --add-label "${LABEL}"
+          fi

@@ -7,6 +7,7 @@ import { recipeForPin, resolveName, type EngineData } from '../engine-data.ts';
 import { collectLibraryRequirements, folderLockMatches } from '../folder-choose.ts';
 import { formatPlan, formatReport, planJson, problemLines } from '../format.ts';
 import { LOCK_FILE, readFolderLock, type FolderLock, type LockedProfile } from '../lockfile.ts';
+import { frameworkSliceProblems } from '../release.ts';
 import { availability, planProfile, type CellPlan } from '../resolve.ts';
 import { addTo, missingByTarget, removeFrom, targetsReached } from '../folder-edit.ts';
 import { initFolder, shippedFolder, type Selection } from '../folder-init.ts';
@@ -99,6 +100,16 @@ function folderProblems(folder: Folder, data: EngineData, lock: FolderLock | und
     return cell ? [{ target: t, cell }] : [];
   });
   collectLibraryRequirements(folder, data, builds, errors);
+  // what releases together (release group, FFmpeg version): each licence's framework targets make one xcframework
+  // bundle, so all four slices or none, before anything is built
+  const releases = new Map<string, Target[]>();
+  for (const t of folder.targets) {
+    const key = `${t.releaseGroup ? `${t.releaseGroup}-` : ''}${lock?.ffmpeg[t.ffmpeg] ?? t.ffmpeg}`;
+    releases.set(key, [...(releases.get(key) ?? []), t]);
+  }
+  for (const [key, targets] of releases) {
+    for (const p of frameworkSliceProblems(targets)) errors.push(releases.size > 1 ? `${key}: ${p}` : p);
+  }
   if (lock && lockMustMatch && !errors.length && !folderLockMatches(folder, data, lock)) errors.push(`${LOCK_FILE} doesn't match the targets; run ffmpeg-build lock`);
   return errors;
 }

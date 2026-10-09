@@ -49,7 +49,7 @@ export function sourceOf(data: EngineData, recipe: string, version: string): Sou
 // threads, PIC, cross-compiling) is in platforms.yml.
 const COMMON_FLAGS = ['--enable-shared', '--disable-static', '--disable-doc', '--disable-debug', '--disable-autodetect', '--pkg-config-flags=--static'];
 // Explicit --disable-gpl / --disable-nonfree as upstream passes them, so `ffmpeg -buildconf` matches today's builds.
-const LICENSE_FLAGS: Record<License, string[]> = {
+export const LICENSE_FLAGS: Record<License, string[]> = {
   lgplv2: ['--disable-gpl', '--disable-nonfree'],
   lgplv3: ['--disable-gpl', '--enable-version3', '--disable-nonfree'],
   gplv2: ['--enable-gpl', '--disable-nonfree'],

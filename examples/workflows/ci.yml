@@ -2,6 +2,7 @@
 name: ci
 on:
   pull_request:
+  workflow_dispatch: # update.yml starts it on its PR's branch (GITHUB_TOKEN's pushes start nothing)
 
 permissions:
   contents: read

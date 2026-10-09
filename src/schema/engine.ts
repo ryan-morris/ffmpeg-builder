@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { flag, name, oneOrMany, text, version } from './common.ts';
 
-export const FFMPEG_LICENSE_CLASSES = ['gpl', 'version3', 'nonfree'] as const;
+// configure's licence lists: gpl (EXTERNAL_LIBRARY_GPL_LIST), version3, gplv3 (needs both: gpl and version3) and nonfree
+export const FFMPEG_LICENSE_CLASSES = ['gpl', 'version3', 'gplv3', 'nonfree'] as const;
 export type FfmpegLicenseClass = (typeof FFMPEG_LICENSE_CLASSES)[number];
 
 const platforms = oneOrMany(text, 'expected all, or a list of platform patterns like linux-* or win-x64');
@@ -31,7 +32,7 @@ const option = z
     kind: text.optional(),
     since: version.optional(),
     min: version.optional(),
-    'ffmpeg-license': z.enum(FFMPEG_LICENSE_CLASSES, { error: 'expected gpl, version3 or nonfree' }).optional(),
+    'ffmpeg-license': z.enum(FFMPEG_LICENSE_CLASSES, { error: 'expected gpl, version3, gplv3 or nonfree' }).optional(),
     platforms: platforms.optional(),
     group: name.optional(),
     configure: z.array(text).optional(), // overrides the recipe's flags, for a library behind several options

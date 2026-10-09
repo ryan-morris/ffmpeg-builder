@@ -3,6 +3,7 @@ name: ci
 on:
   push:
   pull_request:
+  workflow_dispatch: # the support check starts it on its branch (a GITHUB_TOKEN push starts nothing)
 
 permissions:
   contents: read

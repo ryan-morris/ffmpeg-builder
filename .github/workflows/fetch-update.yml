@@ -13,8 +13,16 @@ on:
         description: the target the product takes from each release, e.g. linux-x64-lgplv3
         type: string
         required: true
+      automerge:
+        description: label the PR ffmpeg-build:automerge, so the automerge workflow merges it once its CI passes
+        type: boolean
+        default: false
+      ci-workflow:
+        description: the CI workflow to dispatch on the PR's branch when no token secret is given (GITHUB_TOKEN's pushes start no CI); empty dispatches nothing
+        type: string
+        default: ci.yml
       engine:
-        description: ffmpeg-build version to run ("source" builds this repository)
+        description: ffmpeg-build to run, a version or a git/npm spec like github:owner/repo#ref ("source" builds this repository)
         type: string
         default: latest
     secrets:
@@ -22,7 +30,9 @@ on:
         description: read access to a private release repository, and pushes that trigger CI
         required: false
 
+# actions: write lets GITHUB_TOKEN dispatch the PR's CI; callers must grant it too
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -46,7 +56,16 @@ jobs:
         env:
           ENGINE: ${{ inputs.engine }} # through env, never into the script text
         run: |
-          if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
+          # "source": this repository is the engine. A git or npm spec (with : or /, e.g. github:owner/repo#ref) is packed
+          # first: npm install --global <git spec> skips the devDependencies its prepare build needs. Else an npm version.
+          case "${ENGINE}" in
+            source) (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link) ;;
+            *[:/]*)
+              tgz="$(npm pack --silent --pack-destination "${RUNNER_TEMP}" "${ENGINE}" | tail -1)"
+              [ -n "${tgz}" ] || { echo "::error::npm pack ${ENGINE} made no package"; exit 1; }
+              npm install --global "${RUNNER_TEMP}/${tgz}" ;;
+            *) npm install --global "ffmpeg-build@${ENGINE}" ;;
+          esac
       - name: newer release?
         id: bump
         env:
@@ -59,6 +78,11 @@ jobs:
         if: ${{ !contains(steps.bump.outputs.change, 'up to date') }}
         env:
           CHANGE: ${{ steps.bump.outputs.change }}
+          AUTOMERGE: ${{ inputs.automerge }}
+          CI_WORKFLOW: ${{ inputs.ci-workflow }}
+          HAS_TOKEN: ${{ secrets.token != '' }}
+          DISPATCH_TOKEN: ${{ github.token }}
+          LABEL: ffmpeg-build:automerge
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -70,4 +94,13 @@ jobs:
             gh pr edit "${BRANCH}" --title "${CHANGE}" --body "${CHANGE}"
           else
             gh pr create --head "${BRANCH}" --title "${CHANGE}" --body "${CHANGE}"
+          fi
+          # the PR's CI: a token's push starts it; GITHUB_TOKEN's pushes start nothing, but it may dispatch a run
+          if [ "${HAS_TOKEN}" != true ] && [ -n "${CI_WORKFLOW}" ]; then
+            GH_TOKEN="${DISPATCH_TOKEN}" gh workflow run "${CI_WORKFLOW}" --ref "${BRANCH}"
+          fi
+          # automerge: the label the automerge workflow looks for once the PR's CI passes (no repository settings needed)
+          if [ "${AUTOMERGE}" = true ]; then
+            gh label create "${LABEL}" --force --color 0e8a16 --description "ffmpeg-build merges this PR once its CI passes"
+            gh pr edit "${BRANCH}" --add-label "${LABEL}"
           fi

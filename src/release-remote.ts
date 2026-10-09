@@ -1,8 +1,9 @@
 // Where a folder's releases are published, and the last one for a given tag base: the repository comes from
 // GITHUB_REPOSITORY (in Actions) or the folder's git remote.
 import { execFileSync } from 'node:child_process';
-import { FetchError, listReleases, parseTag, readManifest } from './fetch.ts';
+import { download, FetchError, listReleases, parseTag, readManifest } from './fetch.ts';
 import type { Manifest } from './manifest.ts';
+import { appleSlicesName, parseAppleSlices, type SliceComponents } from './release.ts';
 
 /** owner/repo of a GitHub remote URL (https or ssh), or undefined. */
 export function repoOfRemote(url: string): string | undefined {
@@ -21,15 +22,26 @@ export function publishingRepo(dir: string): string | undefined {
 }
 
 /** The last release of a tag base. One made before ffmpeg-build has no manifest, but still counts for build numbers. */
-export interface Previous { tag: string; build: number; manifest?: Manifest }
+export interface Previous { tag: string; build: number; manifest?: Manifest; slices?: SliceComponents }
 
 async function withManifest(repo: string, at: { tag: string; build: number }): Promise<Previous> {
+  let read: Awaited<ReturnType<typeof readManifest>>;
   try {
-    return { ...at, manifest: (await readManifest({ repo, tag: at.tag })).manifest };
+    read = await readManifest({ repo, tag: at.tag });
   } catch (e) {
     if (e instanceof FetchError && /has no asset manifest\.yml/.test(e.message)) return at;
     throw e;
   }
+  // what each ios entry's slices had, from its .slices.json (releases made before it existed have none)
+  const slices: SliceComponents = {};
+  for (const t of read.manifest.targets.filter((x) => x.platform === 'ios')) {
+    const name = appleSlicesName(t.assets.runtime.name);
+    if (!read.release.assets.some((a) => a.name === name)) continue;
+    const record = parseAppleSlices((await download({ repo, tag: at.tag }, read.release, name)).toString('utf8'));
+    if (!record) throw new FetchError(`${repo}@${at.tag}: ${name} isn't a slices record`);
+    slices[t.name] = Object.fromEntries(Object.entries(record.slices).map(([platform, s]) => [platform, s.components]));
+  }
+  return { ...at, manifest: read.manifest, ...(Object.keys(slices).length ? { slices } : {}) };
 }
 
 const key = (ffmpeg: string, build: number) => {

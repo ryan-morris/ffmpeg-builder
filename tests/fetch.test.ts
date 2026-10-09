@@ -36,6 +36,17 @@ describe('ffmpeg-build fetch', () => {
     expect(await fetchRelease('o/r@9.0.2.3', { platform: 'linux-x64', dev: true }, out)).toContain('already linux-x64-lgplv3');
   });
 
+  it('downloads an ios entry once: its runtime and dev are the same file', async () => {
+    const m = publish('9.0.2.3', [{ name: 'ios-lgplv3', platform: 'ios', runtime: tarGz([{ name: 'libavutil.xcframework/Info.plist', data: 'x' }]) }]);
+    const ios = m.targets[0]!;
+    const rel = gh.releases.at(-1)!;
+    rel.files['manifest.yml'] = Buffer.from(formatManifest({ ...m, targets: [{ ...ios, assets: { runtime: ios.assets.runtime, dev: ios.assets.runtime } }] }));
+    const out = join(mkdtempSync(join(tmpdir(), 'ffmpeg-build-fetch-')), 'ffmpeg');
+    await fetchRelease('o/r@9.0.2.3', { target: 'ios-lgplv3', dev: true }, out);
+    expect(readFileSync(join(out, 'libavutil.xcframework', 'Info.plist'), 'utf8')).toBe('x');
+    expect(gh.requests.filter((r) => r.path.endsWith(`/${encodeURIComponent(ios.assets.runtime.name)}`))).toHaveLength(1);
+  });
+
   it('replaces an older fetch whole, so nothing stale is left', async () => {
     publish('9.0.2.3', [{ name: 'linux-x64-lgplv3', platform: 'linux-x64', runtime: tarGz([{ name: 'old-only.txt', data: 'x' }]) }]);
     publish('9.0.2.4', [{ name: 'linux-x64-lgplv3', platform: 'linux-x64', runtime: runtime('9.0.2') }]);

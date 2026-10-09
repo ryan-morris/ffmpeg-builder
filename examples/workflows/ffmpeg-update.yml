@@ -1,5 +1,7 @@
 # A product's FFmpeg bumps (copy into .github/workflows/): moves ffmpeg.version to the newest build of the same FFmpeg
-# major and opens a PR; the product's CI tests it.
+# major and opens a PR; the product's CI tests it, dispatched on the PR's branch (ci-workflow, which needs
+# workflow_dispatch:) since GITHUB_TOKEN's pushes start none. With automerge: true and automerge.yml, it merges once
+# that passes. FFMPEG_READ_TOKEN is optional: needed to read a private release repository; its pushes start CI.
 name: ffmpeg-update
 on:
   schedule:
@@ -7,6 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write # to dispatch the PR's CI
   contents: write
   pull-requests: write
 
@@ -16,5 +19,6 @@ jobs:
     with:
       pin-file: ffmpeg.version
       target: linux-x64-lgplv3
+      ci-workflow: product.yml
     secrets:
       token: ${{ secrets.FFMPEG_READ_TOKEN }}

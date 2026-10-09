@@ -1,8 +1,8 @@
-import { cpSync, mkdtempSync, readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { formatSupport, newMajors, parseConfigure, supportReport, writeReleases } from '../src/ffmpeg-support.ts';
+import { formatSupport, newMajors, parseConfigure, SupportError, supportCheck, supportReport, writeReleases } from '../src/ffmpeg-support.ts';
 import { fixtureData, fixtureEngineRoot } from './helpers.ts';
 
 // the shape of FFmpeg's configure lists: lists of names, some holding other lists by $NAME
@@ -53,6 +53,54 @@ describe('the FFmpeg support check', () => {
     const moved = parseConfigure(CONFIGURE.replace('    libx265\n', '').replace('    libfdk_aac\n', '    libfdk_aac\n    libx265\n'));
     const r = supportReport(data, '9', ['9.0.2'], moved, undefined);
     expect(r.reclassed).toEqual([{ option: 'x265', data: 'gpl', configure: 'nonfree' }]);
+  });
+
+  it("doesn't report as new what the data already covers, and reports any name gone since the previous release", () => {
+    const data = fixtureData();
+    // libsrt and vaapi are new in this release's configure, but the data already has srt and vaapi
+    const previous = parseConfigure(CONFIGURE.replace('    libsrt\n', '').replace('    vaapi\n', '').replace('    libfdk_aac\n', ''));
+    const newest = parseConfigure(CONFIGURE.replace('    nvenc\n', '').replace('    libdav1d\n', ''));
+    const r = supportReport(data, '9', ['9.0.2', '9.1.0'], newest, previous);
+    expect(r.newOptions).toEqual([]);
+    expect(r.gone).toEqual(['dav1d', 'nvenc']); // nvenc has no lib prefix
+    // a name the previous release never had isn't "gone" from this one
+    expect(supportReport(data, '9', ['9.1.0'], parseConfigure(CONFIGURE.replace('    nvenc\n', '')), parseConfigure(CONFIGURE.replace('    nvenc\n', ''))).gone).toEqual([]);
+  });
+
+  describe('the whole check', () => {
+    const configureOf = async () => parseConfigure(CONFIGURE);
+    const root = () => {
+      const r = mkdtempSync(join(tmpdir(), 'ffmpeg-build-support-'));
+      cpSync(fixtureEngineRoot, r, { recursive: true });
+      return r;
+    };
+
+    it("refuses to say all is current when upstream's versions couldn't be read", async () => {
+      await expect(supportCheck({ data: fixtureData(), dataRoot: root(), upstream: [], configureOf, write: false })).rejects.toThrow(SupportError);
+    });
+
+    it('applies the releases with write, and says so', async () => {
+      const r = root();
+      const text = await supportCheck({ data: fixtureData(), dataRoot: r, upstream: ['9.0.0', '9.0.1', '9.0.2', '9.1.0', '9.1.1'], configureOf, write: true });
+      expect(text).toContain('- releases: +9.1.1 (applied)');
+      expect(readFileSync(join(r, 'ffmpeg', '9.yml'), 'utf8')).toContain('releases: [9.0.0, 9.0.1, 9.0.2, 9.1.0, 9.1.1]');
+      const dry = await supportCheck({ data: fixtureData(), dataRoot: root(), upstream: ['9.0.0', '9.0.1', '9.0.2', '9.1.0', '9.1.1'], configureOf, write: false });
+      expect(dry).toContain('(run with --write to apply)');
+    });
+
+    it("fails when the releases line isn't in the form it rewrites", async () => {
+      const r = root();
+      const file = join(r, 'ffmpeg', '9.yml');
+      writeFileSync(file, readFileSync(file, 'utf8').replace(/^releases: \[(.*)\]$/m, (_, l: string) => `releases:\n${l.split(', ').map((v) => `  - ${v}`).join('\n')}`));
+      await expect(supportCheck({ data: fixtureData(), dataRoot: r, upstream: ['9.0.0', '9.1.1'], configureOf, write: true })).rejects.toThrow('ffmpeg/9.yml: no `releases: [...]` line');
+    });
+  });
+
+  it('reports an option moved from the gpl list to the gplv3 list', () => {
+    const data = fixtureData();
+    const moved = parseConfigure(CONFIGURE.replace('    libx265\n', '').replace('    libsmbclient\n', '    libsmbclient\n    libx265\n'));
+    expect(moved.get('libx265')).toBe('gplv3');
+    expect(supportReport(data, '9', ['9.0.2'], moved, undefined).reclassed).toEqual([{ option: 'x265', data: 'gpl', configure: 'gplv3' }]);
   });
 
   it("rewrites only the releases line, and knows a major the data doesn't have", () => {

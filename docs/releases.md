@@ -30,12 +30,20 @@ each of the four builds' notices in full, after a header saying which build went
     ffmpeg-build bundle --apple --release 9.0.2.3 --dist dist   # on a Mac with Xcode, after building the four
     ffmpeg-build bundle --release 9.0.2.3 --dist dist           # anywhere: the release, with the bundle in it
 
-`bundle --apple` refuses off macOS, when a licence lacks one of the four targets or its archive, and when a slice's
-binaries aren't that slice's architectures and platform. Plain `bundle` then publishes the bundle in place of the
-four builds' archives, as one `manifest.yml` entry named `ios-<license>` with platform `ios`; its runtime and dev
-assets are the same file (the xcframeworks carry the headers). The entry's components are the four builds' together,
-and its toolchain and definition change when any build's do. The four builds' sources are in the sources archive,
-each with its own section in `SOURCES.md`. Plain `bundle` refuses a release whose bundle isn't in `--dist`.
+A licence with some but not all four targets (or two of one) in a release is refused by `check` and `releases`, so CI
+stops before building anything; `bundle --apple` applies the same rule. It also refuses off macOS, when a slice's
+archive is missing, and when a slice's binaries aren't that slice's architectures and platform. Beside each bundle it
+writes `ffmpeg-<version>-ios-<license>.slices.json`: the bundle's sha256 and each slice archive's, with each slice's
+components.
+
+Plain `bundle` then publishes the bundle in place of the four builds' archives, as one `manifest.yml` entry named
+`ios-<license>` with platform `ios`; its runtime and dev assets are the same file (the xcframeworks carry the headers).
+The entry's components are the four builds' together, and its toolchain and definition change when any build's do.
+The four builds' sources are in the sources archive, each with its own section in `SOURCES.md`. Plain `bundle`
+refuses a release whose bundle or `.slices.json` isn't in `--dist`, and a stale bundle: one whose slice archives were
+built again after `bundle --apple` made it. It publishes the `.slices.json` with the release, and the next release's
+removal guard compares each slice with it, so a component dropped from one slice only stops the release too (allow it
+with `allow-removal:` on that slice's target).
 
 ## CI (GitHub Actions)
 
@@ -46,13 +54,35 @@ The engine ships reusable workflows (preview: each has been run end to end on th
   macOS, and the release (`bundle`, then a GitHub release with every asset). `publish: changed-only | always | never`;
   `never` is a pull-request check. One `all-builds` job to require.
 - **`update.yml`**: `ffmpeg-build update`, then one pull request on `ffmpeg-build/update` with the update summary.
-  `automerge: true` merges it when CI passes. Opening the pull request needs either a `token` secret (a token whose
-  pushes also run your CI) or the repository setting *Allow GitHub Actions to create and approve pull requests*
-  (Settings, Actions, General); with only the latter, the PR's own CI doesn't start until someone pushes to it.
-- **`fetch-update.yml`**: for products (below).
+  Opening the pull request needs the repository setting *Allow GitHub Actions to create and approve pull requests*
+  (Settings, Actions, General), or a `token` secret.
+- **`fetch-update.yml`**: for products (below); the same PR handling.
+- **`automerge.yml`**: merges the PR of `update.yml` or `fetch-update.yml` with `automerge: true` once its CI passes.
+
+**The PR's CI starts without any token.** Pushes made with `GITHUB_TOKEN` start no workflows, so after pushing,
+`update.yml` and `fetch-update.yml` dispatch the CI workflow named by their `ci-workflow` input (default `ci.yml`;
+empty dispatches nothing) on the PR's branch. That workflow needs a `workflow_dispatch:` trigger, and the caller must
+grant `actions: write` (with `contents: write` and `pull-requests: write`). The `token` secret stays optional: a token
+whose pushes start CI by themselves (then nothing is dispatched).
+
+**Automerge needs no repository settings** (no auto-merge, branch protection or required checks, which free private
+repositories can't have). With `automerge: true` the PR is labelled `ffmpeg-build:automerge`; a workflow triggered by
+`workflow_run` (your CI's `completed` runs) calls `automerge.yml`, which merges the labelled `ffmpeg-build/` PR whose
+head is still the commit the passing run tested (`gh pr merge --squash --match-head-commit`). A merge made with
+`GITHUB_TOKEN` starts no workflows on the default branch; the scheduled release train picks it up.
+
+Each takes an `engine` input: the ffmpeg-build to run. A version installs that npm release (the default is the
+version `ffmpeg.lock` records); a git or npm spec (one with `:` or `/`) is installed from it, and `source` builds the
+calling repository itself (the engine's own tests). Until the package is on npm, set
+`engine: github:<owner>/<repo>#<ref>` (e.g. `github:ryan-morris/ffmpeg-builder#main`, or a tag or commit to pin it).
+npm builds `dist/` from a git spec when it packs it (the `prepare` script). The workflows run `npm pack "<spec>"` and
+install the package it makes, because `npm install --global <git spec>` runs `prepare` without the devDependencies it
+needs (TypeScript). By hand, the same:
+
+    npm install --global "$(npm pack --silent github:ryan-morris/ffmpeg-builder#main | tail -1)"
 
 Copy-ready callers are in [`examples/workflows/`](../examples/workflows): a daily release train, a pull-request check,
-lock updates, a product's FFmpeg bumps, and a `dependabot.yml` for the actions they use.
+lock updates, a product's FFmpeg bumps, their automerge, and a `dependabot.yml` for the actions they use.
 
 ## Products: using a build without building FFmpeg
 

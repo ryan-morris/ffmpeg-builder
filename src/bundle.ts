@@ -11,7 +11,7 @@ import { ffmpegAtLeast, FetchError, listReleases, parseTag, repoIsPrivate } from
 import type { FolderLock } from './lockfile.ts';
 import { formatManifest, MANIFEST_FILE, parseManifest, type Manifest, type ManifestTarget } from './manifest.ts';
 import { packageVersion } from './paths.ts';
-import { planReleases, publishedTargets, removals, type PlannedRelease, type PlannedTarget } from './release.ts';
+import { planReleases, publishedTargets, removals, type PlannedRelease, type PlannedTarget, type SliceComponents, appleSlicesName, parseAppleSlices } from './release.ts';
 import { previousReleases, publishingRepo } from './release-remote.ts';
 import { writeTarGz, type TarEntry } from './tar-write.ts';
 import { artifactName, type Folder } from './targets.ts';
@@ -27,6 +27,26 @@ const sha256 = (file: string) => createHash('sha256').update(readFileSync(file))
 /** A licence's xcframework bundle: ffmpeg-<version>-ios-<license>.tar.gz, written by bundle --apple. */
 export const appleBundleName = (ffmpeg: string, license: string) => `ffmpeg-${ffmpeg}-ios-${license}.tar.gz`;
 
+/** The bundle and its slices as they are now in `dist`, checked against what bundle --apple recorded. */
+function checkAppleBundle(dist: string, bundleName: string, slices: PlannedTarget[], tag: string): string {
+  const again = `make it again on a Mac with ffmpeg-build bundle --apple --release ${tag} --dist ${dist}`;
+  const sidecar = appleSlicesName(bundleName);
+  if (!existsSync(join(dist, sidecar))) throw new BundleError(`${sidecar} isn't in ${dist}: bundle --apple writes it beside ${bundleName}, which can't be checked without it; ${again}`);
+  const record = parseAppleSlices(readFileSync(join(dist, sidecar), 'utf8'));
+  if (!record) throw new BundleError(`${sidecar} isn't a slices record; ${again}`);
+  if (record.bundle.name !== bundleName || record.bundle.sha256 !== sha256(join(dist, bundleName))) {
+    throw new BundleError(`${bundleName} isn't the bundle ${sidecar} records; ${again}`);
+  }
+  for (const p of slices) {
+    const archive = `${artifactName(p.target, p.facts.ffmpeg)}.tar.gz`;
+    const was = record.slices[p.target.platform];
+    if (!was || was.archive !== archive || was.sha256 !== sha256(join(dist, archive))) {
+      throw new BundleError(`${bundleName} is stale: it wasn't made from the ${archive} in ${dist} (built again since); ${again}`);
+    }
+  }
+  return sidecar;
+}
+
 /** Every file under `dir`, relative paths, sorted. */
 function filesUnder(dir: string, base = dir): string[] {
   if (!existsSync(dir)) return [];
@@ -40,6 +60,7 @@ export interface BundleOptions {
   dist: string;
   engineRoot: string;
   previous?: Manifest; // the last release's manifest (default: looked up on GitHub)
+  previousSlices?: SliceComponents; // and what its ios entries' slices had (from its .slices.json files)
   repo?: string; // owner/repo it publishes to (default: GITHUB_REPOSITORY or the folder's remote)
 }
 
@@ -214,15 +235,18 @@ export async function bundle(folder: Folder, data: EngineData, lock: FolderLock,
 
   // the always-on guard: the last release of this base
   let previous = o.previous;
+  let previousSlices = o.previousSlices;
   if (!previous && repo) {
     try {
-      previous = (await previousReleases(repo, rel.group, rel.ffmpeg)).lastInMajor?.manifest;
+      const last = (await previousReleases(repo, rel.group, rel.ffmpeg)).lastInMajor;
+      previous = last?.manifest;
+      previousSlices = last?.slices;
     } catch (e) {
       if (e instanceof FetchError) throw new BundleError(`can't read ${repo}'s last release to check nothing was removed: ${e.message}`);
       throw e;
     }
   }
-  const gone = removals(rel, previous, folder);
+  const gone = removals(rel, previous, folder, previousSlices);
   if (gone.length) throw new BundleError(gone.join('\n'));
 
   // every build is checked, the framework slices too: their sources go into the sources archive
@@ -234,6 +258,7 @@ export async function bundle(folder: Folder, data: EngineData, lock: FolderLock,
     archives.set(p.target.name, b);
   }
   const targets: ManifestTarget[] = [];
+  const sidecars: string[] = [];
   for (const t of publishedTargets(rel)) {
     let runtime: string;
     let dev: string;
@@ -243,6 +268,7 @@ export async function bundle(folder: Folder, data: EngineData, lock: FolderLock,
       if (!existsSync(join(o.dist, runtime))) {
         throw new BundleError(`${runtime} (the ${t.license} xcframework bundle) isn't in ${o.dist}: make it on a Mac with ffmpeg-build bundle --apple --release ${o.tag} --dist ${o.dist}`);
       }
+      sidecars.push(checkAppleBundle(o.dist, runtime, t.slices, o.tag));
     } else {
       ({ runtime, dev } = archives.get(t.name)!);
     }
@@ -269,7 +295,7 @@ export async function bundle(folder: Folder, data: EngineData, lock: FolderLock,
   writeFileSync(join(o.dist, MANIFEST_FILE), formatManifest(manifest));
   writeFileSync(join(o.dist, 'release-notes.md'), releaseNotes(manifest, rel, repo));
 
-  const assets = [...new Set(targets.flatMap((t) => [t.assets.runtime.name, t.assets.dev.name])), sourcesName, MANIFEST_FILE];
+  const assets = [...new Set(targets.flatMap((t) => [t.assets.runtime.name, t.assets.dev.name])), ...sidecars, sourcesName, MANIFEST_FILE];
   const sums = assets.map((a) => `${sha256(join(o.dist, a))}  ${a}`).sort((a, b) => a.slice(66).localeCompare(b.slice(66)));
   writeFileSync(join(o.dist, 'SHA256SUMS'), `${sums.join('\n')}\n`);
   assets.push('SHA256SUMS');

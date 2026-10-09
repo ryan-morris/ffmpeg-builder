@@ -52,7 +52,7 @@
     "test": "vitest run",
     "schema": "node scripts/gen-schema.ts",
     "dev": "node src/cli.ts",
-    "prepublishOnly": "npm run build"
+    "prepare": "npm run build"
   },
   "dependencies": {
     "commander": "15.0.0",

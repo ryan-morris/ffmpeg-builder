@@ -1,0 +1,16 @@
+# Merges ffmpeg-build's pull requests (update.yml / fetch-update.yml with automerge: true) once their CI passes
+# (copy into .github/workflows/). Needs no repository settings: no auto-merge, branch protection or required checks.
+# List your CI workflows by their `name:` (a consumer's ci, a product's own CI).
+name: automerge
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    uses: devenvy/ffmpeg-build/.github/workflows/automerge.yml@v1

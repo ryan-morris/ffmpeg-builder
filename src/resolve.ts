@@ -27,11 +27,13 @@ export interface ProfilePlan { variants: Variant[]; platforms: string[]; cells: 
 export const LICENSE_ALLOWS: Record<FfmpegLicenseClass, License[]> = {
   gpl: ['gplv2', 'gplv3', 'nonfree'],
   version3: ['lgplv3', 'gplv3', 'nonfree'],
+  gplv3: ['gplv3', 'nonfree'],
   nonfree: ['nonfree'],
 };
 const LICENSE_TEXT: Record<FfmpegLicenseClass, string> = {
   gpl: 'is GPL-only',
   version3: 'needs version 3 (lgplv3, gplv3 or nonfree)',
+  gplv3: 'is GPL version 3 only (gplv3 or nonfree)',
   nonfree: 'is nonfree-only: it needs license: nonfree',
 };
 

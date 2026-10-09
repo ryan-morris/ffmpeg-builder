@@ -4,13 +4,14 @@
 // ios-arm64_x86_64-maccatalyst, the two Catalyst builds lipo-fused and signed again ad hoc), and one
 // THIRD-PARTY-NOTICES.txt at the root. Plain `bundle` then publishes it in place of the four builds' archives.
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appleBundleName, BundleError, releaseOf } from './bundle.ts';
 import type { EngineData } from './engine-data.ts';
 import type { FolderLock } from './lockfile.ts';
-import { APPLE_SLICES, isFrameworkPlatform, type PlannedRelease, type PlannedTarget } from './release.ts';
+import { APPLE_SLICES, appleSlicesName, frameworkSliceProblems, isFrameworkPlatform, type AppleSlices, type PlannedRelease, type PlannedTarget } from './release.ts';
 import { artifactName, type Folder } from './targets.ts';
 
 export interface AppleBundleOptions {
@@ -36,22 +37,28 @@ const EXPECT: Record<string, { archs: string[]; platform: string }> = {
  * xcframeworks have exactly three slices (the two Catalyst builds fused into one).
  */
 export function appleSets(rel: PlannedRelease): Map<string, Map<Slice, PlannedTarget>> {
+  const problems = frameworkSliceProblems(rel.targets.map((p) => p.target));
+  if (problems.length) throw new BundleError(problems.join('\n'));
   const sets = new Map<string, Map<Slice, PlannedTarget>>();
   for (const p of rel.targets.filter((t) => isFrameworkPlatform(t.target.platform))) {
-    const platform = p.target.platform as Slice;
-    if (!APPLE_SLICES.includes(platform)) throw new BundleError(`${p.target.name}: ${platform} isn't one of the xcframework slices (${APPLE_SLICES.join(', ')})`);
     const set = sets.get(p.target.license) ?? new Map<Slice, PlannedTarget>();
-    const other = set.get(platform);
-    if (other) throw new BundleError(`${p.target.license} has two ${platform} targets (${other.target.name}, ${p.target.name}); an xcframework bundle takes one of each`);
-    set.set(platform, p);
+    set.set(p.target.platform as Slice, p);
     sets.set(p.target.license, set);
   }
-  for (const [license, set] of sets) {
-    for (const s of APPLE_SLICES) {
-      if (!set.has(s)) throw new BundleError(`${license} has no ${s} target: an xcframework bundle needs ${APPLE_SLICES.slice(0, -1).join(', ')} and ${APPLE_SLICES.at(-1)}`);
-    }
-  }
   return sets;
+}
+
+const sha256 = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
+
+/** The .slices.json of a bundle in `dist`: its sha256, and each slice's archive, sha256 and components. */
+export function appleSlicesRecord(dist: string, bundleName: string, set: Map<Slice, PlannedTarget>, ffmpeg: string): AppleSlices {
+  const slices: AppleSlices['slices'] = {};
+  for (const slice of APPLE_SLICES) {
+    const p = set.get(slice)!;
+    const archive = `${artifactName(p.target, ffmpeg)}.tar.gz`;
+    slices[slice] = { target: p.target.name, archive, sha256: sha256(join(dist, archive)), components: p.facts.components };
+  }
+  return { bundle: { name: bundleName, sha256: sha256(join(dist, bundleName)) }, slices };
 }
 
 const run = (cmd: string, args: string[]) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, COPYFILE_DISABLE: '1' } });
@@ -170,7 +177,9 @@ export async function bundleApple(folder: Folder, data: EngineData, lock: Folder
 
       const name = appleBundleName(rel.ffmpeg, license);
       run('tar', ['-czf', join(o.dist, name), '-C', out, '.']);
-      assets.push(name);
+      // what it was made from, so plain bundle can refuse it once a slice is built again
+      writeFileSync(join(o.dist, appleSlicesName(name)), `${JSON.stringify(appleSlicesRecord(o.dist, name, set, rel.ffmpeg), null, 2)}\n`);
+      assets.push(name, appleSlicesName(name));
     } finally {
       rmSync(work, { recursive: true, force: true });
     }

@@ -57,7 +57,7 @@ export async function releaseRows(folder: Folder, data: EngineData, options: { o
       ...(follows ? { previous: follows.tag } : {}),
       due: reasons.length > 0,
       reasons,
-      removals: removals(rel, follows?.manifest, folder),
+      removals: removals(rel, follows?.manifest, folder, follows?.slices),
       targets: rel.targets.map((t) => ({ name: t.target.name, platform: t.target.platform, runner: t.runner, cacheKey: cacheKey(t.target.platform, t.facts) })),
     });
   }

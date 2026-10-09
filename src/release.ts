@@ -32,6 +32,59 @@ export interface PlannedRelease { group: string; ffmpeg: string; base: string; t
 export const APPLE_SLICES = ['ios-arm64', 'ios-sim-arm64', 'maccatalyst-arm64', 'maccatalyst-x64'] as const;
 export const isFrameworkPlatform = (platform: string) => /^(ios|maccatalyst)-/.test(platform);
 
+/**
+ * Why the framework targets released together can't make their xcframework bundles: each licence needs exactly one
+ * target of each of the four slices (the xcframeworks have exactly three slices, the two Catalyst builds fused into
+ * one). check, releases and bundle --apple all use this rule, so a release that can't be bundled stops before CI
+ * builds anything.
+ */
+export function frameworkSliceProblems(targets: Pick<Target, 'name' | 'platform' | 'license'>[]): string[] {
+  const problems: string[] = [];
+  const sets = new Map<string, Map<string, string>>(); // licence -> slice -> target name
+  for (const t of targets.filter((x) => isFrameworkPlatform(x.platform))) {
+    if (!(APPLE_SLICES as readonly string[]).includes(t.platform)) {
+      problems.push(`${t.name}: ${t.platform} isn't one of the xcframework slices (${APPLE_SLICES.join(', ')})`);
+      continue;
+    }
+    const set = sets.get(t.license) ?? new Map<string, string>();
+    const other = set.get(t.platform);
+    if (other) problems.push(`${t.license} has two ${t.platform} targets (${other}, ${t.name}); an xcframework bundle takes one of each`);
+    else set.set(t.platform, t.name);
+    sets.set(t.license, set);
+  }
+  for (const [license, set] of sets) {
+    const missing = APPLE_SLICES.filter((s) => !set.has(s));
+    if (missing.length) {
+      problems.push(`${license} has no ${missing.join(' or ')} target: an xcframework bundle needs ${APPLE_SLICES.slice(0, -1).join(', ')} and ${APPLE_SLICES.at(-1)} (it has ${[...set.values()].join(', ')})`);
+    }
+  }
+  return problems;
+}
+
+/**
+ * Beside each xcframework bundle, bundle --apple writes ffmpeg-<version>-ios-<license>.slices.json: the bundle's
+ * sha256 and, per slice, the archive it was made from with its sha256 and components. Plain bundle refuses a bundle
+ * whose slices were rebuilt since (a stale bundle), and publishes the file, so the next release's removal guard can
+ * compare slice by slice.
+ */
+export interface AppleSlices {
+  bundle: { name: string; sha256: string };
+  slices: Record<string, { target: string; archive: string; sha256: string; components: Record<string, string> }>;
+}
+export const appleSlicesName = (bundleName: string) => bundleName.replace(/\.tar\.gz$/, '.slices.json');
+
+/** Reads and shape-checks a .slices.json; undefined when it isn't one. */
+export function parseAppleSlices(text: string): AppleSlices | undefined {
+  try {
+    const v = JSON.parse(text) as AppleSlices;
+    const ok = typeof v?.bundle?.name === 'string' && typeof v.bundle.sha256 === 'string' && typeof v.slices === 'object' && v.slices !== null
+      && Object.values(v.slices).every((s) => typeof s?.archive === 'string' && typeof s.sha256 === 'string' && typeof s.components === 'object' && s.components !== null);
+    return ok ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** What a release publishes: a target as it is, or a licence's framework slices as one ios-<license> entry. */
 export interface PublishedTarget {
   name: string;
@@ -113,6 +166,9 @@ export function planReleases(folder: Folder, data: EngineData, lock: FolderLock,
     rel.targets.push({ target: t, cell: r.cell, facts: r.facts, runner: runnerOf(data, t.platform) });
     by.set(base, rel);
   }
+  for (const rel of by.values()) {
+    for (const p of frameworkSliceProblems(rel.targets.map((x) => x.target))) errors.push(`${rel.base}: ${p}`);
+  }
   return { releases: [...by.values()].sort((a, b) => a.base.localeCompare(b.base, undefined, { numeric: true })), errors };
 }
 
@@ -184,20 +240,42 @@ function factDiff(now: TargetFacts, was: ManifestTarget, m: Manifest): string[] 
   return out;
 }
 
+/** What each framework slice of a published ios-<license> entry had: entry name -> slice platform -> components. */
+export type SliceComponents = Record<string, Record<string, Record<string, string>>>;
+
 /**
  * The always-on guard: a component a target had in the last release that it no longer has stops the release, unless
- * the target (or the folder) allows that removal.
+ * the target (or the folder) allows that removal. An ios-<license> entry is compared slice by slice when the last
+ * release recorded its slices (`previousSlices`, from its .slices.json), so a component dropped from one slice only
+ * is caught too; otherwise by the union of its slices.
  */
-export function removals(rel: PlannedRelease, previous: Manifest | undefined, folder: Folder): string[] {
+export function removals(rel: PlannedRelease, previous: Manifest | undefined, folder: Folder, previousSlices: SliceComponents = {}): string[] {
   if (!previous) return [];
   const errors: string[] = [];
-  for (const { name, facts, allowRemoval } of publishedTargets(rel)) {
+  for (const { name, facts, allowRemoval, slices } of publishedTargets(rel)) {
     const was = previous.targets.find((t) => t.name === name);
     if (!was) continue;
+    const framework = slices.length > 1 || isFrameworkPlatform(slices[0]!.target.platform);
+    const fix = (c: string, only?: PlannedTarget[]) =>
+      framework
+        ? `add allow-removal: [${c}] to ${(only ?? slices).map((s) => s.target.name).join(', ')} (the slice targets of ${name})`
+        : `add allow-removal: [${c}] to the target`;
+    const recorded = previousSlices[name];
+    if (framework && recorded) {
+      for (const s of slices) {
+        const allowed = new Set([...folder.allowRemoval, ...s.target.allowRemoval]);
+        for (const c of Object.keys(recorded[s.target.platform] ?? {})) {
+          if (!(c in s.facts.components) && !allowed.has(c)) {
+            errors.push(`${name}: ${c} was in its ${s.target.platform} slice in ${previous.release} and is gone now; if that is intended, ${fix(c, [s])}`);
+          }
+        }
+      }
+      continue;
+    }
     const allowed = new Set([...folder.allowRemoval, ...allowRemoval]);
     for (const c of Object.keys(was.components)) {
       if (!(c in facts.components) && !allowed.has(c)) {
-        errors.push(`${name}: ${c} was in ${previous.release} and is gone now; if that is intended, add allow-removal: [${c}] to the target`);
+        errors.push(`${name}: ${c} was in ${previous.release} and is gone now; if that is intended, ${fix(c)}`);
       }
     }
   }

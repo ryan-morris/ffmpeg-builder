@@ -16,7 +16,7 @@ on:
         type: string
         default: changed-only
       engine:
-        description: ffmpeg-build version to run (default the one ffmpeg.lock records; "source" builds this repository)
+        description: ffmpeg-build to run, a version or a git/npm spec like github:owner/repo#ref (default the version ffmpeg.lock records; "source" builds this repository)
         type: string
         default: ''
 
@@ -55,7 +55,16 @@ jobs:
         env:
           ENGINE: ${{ steps.engine.outputs.version }}
         run: |
-          if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
+          # "source": this repository is the engine. A git or npm spec (with : or /, e.g. github:owner/repo#ref) is packed
+          # first: npm install --global <git spec> skips the devDependencies its prepare build needs. Else an npm version.
+          case "${ENGINE}" in
+            source) (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link) ;;
+            *[:/]*)
+              tgz="$(npm pack --silent --pack-destination "${RUNNER_TEMP}" "${ENGINE}" | tail -1)"
+              [ -n "${tgz}" ] || { echo "::error::npm pack ${ENGINE} made no package"; exit 1; }
+              npm install --global "${RUNNER_TEMP}/${tgz}" ;;
+            *) npm install --global "ffmpeg-build@${ENGINE}" ;;
+          esac
       - id: plan
         name: releases
         working-directory: ${{ inputs.folder }}
@@ -100,8 +109,16 @@ jobs:
         env:
           ENGINE: ${{ needs.plan.outputs.engine }}
         run: |
-          # "source": this repository is the engine (its own test builds); otherwise the npm package
-          if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
+          # "source": this repository is the engine. A git or npm spec (with : or /, e.g. github:owner/repo#ref) is packed
+          # first: npm install --global <git spec> skips the devDependencies its prepare build needs. Else an npm version.
+          case "${ENGINE}" in
+            source) (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link) ;;
+            *[:/]*)
+              tgz="$(npm pack --silent --pack-destination "${RUNNER_TEMP}" "${ENGINE}" | tail -1)"
+              [ -n "${tgz}" ] || { echo "::error::npm pack ${ENGINE} made no package"; exit 1; }
+              npm install --global "${RUNNER_TEMP}/${tgz}" ;;
+            *) npm install --global "ffmpeg-build@${ENGINE}" ;;
+          esac
       - name: Apple build tools
         if: runner.os == 'macOS'
         run: sed 's/#.*//' "$(npm root --global)/ffmpeg-build/platforms/setup/apple-brew.txt" | xargs brew install
@@ -148,8 +165,16 @@ jobs:
         env:
           ENGINE: ${{ needs.plan.outputs.engine }}
         run: |
-          # "source": this repository is the engine (its own test builds); otherwise the npm package
-          if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
+          # "source": this repository is the engine. A git or npm spec (with : or /, e.g. github:owner/repo#ref) is packed
+          # first: npm install --global <git spec> skips the devDependencies its prepare build needs. Else an npm version.
+          case "${ENGINE}" in
+            source) (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link) ;;
+            *[:/]*)
+              tgz="$(npm pack --silent --pack-destination "${RUNNER_TEMP}" "${ENGINE}" | tail -1)"
+              [ -n "${tgz}" ] || { echo "::error::npm pack ${ENGINE} made no package"; exit 1; }
+              npm install --global "${RUNNER_TEMP}/${tgz}" ;;
+            *) npm install --global "ffmpeg-build@${ENGINE}" ;;
+          esac
       - uses: actions/download-artifact@v7
         with:
           pattern: dist-${{ matrix.release }}-*
@@ -160,7 +185,10 @@ jobs:
       - uses: actions/upload-artifact@v6
         with:
           name: ios-${{ matrix.release }}
-          path: ${{ runner.temp }}/dist/ffmpeg-*-ios-*.tar.gz
+          # each bundle with its .slices.json: plain bundle checks the bundle against the slice archives with it
+          path: |
+            ${{ runner.temp }}/dist/ffmpeg-*-ios-*.tar.gz
+            ${{ runner.temp }}/dist/ffmpeg-*-ios-*.slices.json
           retention-days: 5
           if-no-files-found: ignore
 
@@ -193,8 +221,16 @@ jobs:
         env:
           ENGINE: ${{ needs.plan.outputs.engine }}
         run: |
-          # "source": this repository is the engine (its own test builds); otherwise the npm package
-          if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
+          # "source": this repository is the engine. A git or npm spec (with : or /, e.g. github:owner/repo#ref) is packed
+          # first: npm install --global <git spec> skips the devDependencies its prepare build needs. Else an npm version.
+          case "${ENGINE}" in
+            source) (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link) ;;
+            *[:/]*)
+              tgz="$(npm pack --silent --pack-destination "${RUNNER_TEMP}" "${ENGINE}" | tail -1)"
+              [ -n "${tgz}" ] || { echo "::error::npm pack ${ENGINE} made no package"; exit 1; }
+              npm install --global "${RUNNER_TEMP}/${tgz}" ;;
+            *) npm install --global "ffmpeg-build@${ENGINE}" ;;
+          esac
       - uses: actions/download-artifact@v7
         with:
           pattern: '{dist,ios}-${{ matrix.release }}*'

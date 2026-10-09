@@ -40,6 +40,13 @@ fails when it is stale).
 - **Every week** (`canary.yml`): the canary lock moves to the newest upstream versions, in the run only, and every
   canary target builds in full. A failure there is a new upstream release that broke a recipe, found before any
   consumer's update PR meets it.
+- **Every night** (`ffmpeg-support.yml`): `scripts/ffmpeg-support.ts` keeps `ffmpeg/<major>.yml`'s releases equal to
+  FFmpeg's tags and reports what a new release's configure adds, drops or reclassifies. When `ffmpeg/` changed it
+  opens or refreshes one pull request on `ffmpeg-build/ffmpeg-support`. Its CI starts without any token: a push made
+  with `GITHUB_TOKEN` starts no workflows, so the workflow then dispatches `ci.yml` on the branch (`actions: write`;
+  `ci.yml` has `workflow_dispatch:`). A `SUPPORT_TOKEN` secret is optional (a fine-grained token with contents and
+  pull-requests write): it is used instead, and its push starts CI by itself. `test-update.yml` and
+  `test-fetch-update.yml` dispatch `ci.yml` the same way.
 
 ## Changes that need more than tests
 

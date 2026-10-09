@@ -1,5 +1,7 @@
-# A consumer's lock updates (copy into .github/workflows/): one PR with the update summary, merged when CI passes.
-# UPDATE_TOKEN: a fine-grained token with contents and pull-requests write, so its pushes run CI (GITHUB_TOKEN's don't).
+# A consumer's lock updates (copy into .github/workflows/): one PR with the update summary, merged when CI passes
+# (with automerge.yml). No token is needed: the workflow dispatches your CI (ci.yml, which needs workflow_dispatch:)
+# on the PR's branch, since GITHUB_TOKEN's pushes start none. UPDATE_TOKEN is optional: a fine-grained token with
+# contents and pull-requests write, whose pushes start CI by themselves.
 name: update
 on:
   schedule:
@@ -7,6 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write # to dispatch the PR's CI
   contents: write
   pull-requests: write
 
@@ -15,5 +18,6 @@ jobs:
     uses: devenvy/ffmpeg-build/.github/workflows/update.yml@v1
     with:
       automerge: true
+      ci-workflow: ci.yml
     secrets:
       token: ${{ secrets.UPDATE_TOKEN }}

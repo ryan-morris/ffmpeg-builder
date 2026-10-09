@@ -59,7 +59,8 @@ async function release(pin: Pin): Promise<Release> {
   return json<Release>(`${api()}/repos/${pin.repo}/releases/tags/${encodeURIComponent(pin.tag)}`, `release ${pin.repo}@${pin.tag}`);
 }
 
-async function download(pin: Pin, rel: Release, name: string): Promise<Buffer> {
+/** One asset of a release; FetchError (exit 1) when the release has no such asset. */
+export async function download(pin: Pin, rel: Release, name: string): Promise<Buffer> {
   const a = rel.assets.find((x) => x.name === name);
   if (!a) throw new FetchError(`${pin.repo}@${pin.tag} has no asset ${name}`, 1);
   const res = await get(a.url, 'application/octet-stream');
@@ -143,7 +144,8 @@ export async function fetchRelease(pinText: string, sel: { target?: string; plat
   checkOut(target);
   const { release: rel, manifest } = await readManifest(pin);
   const t = pickTarget(manifest, sel);
-  const assets = [t.assets.runtime, ...(sel.dev ? [t.assets.dev] : [])];
+  // by name: an ios entry's runtime and dev are the same file, downloaded and unpacked once
+  const assets = [t.assets.runtime, ...(sel.dev ? [t.assets.dev] : [])].filter((a, i, all) => all.findIndex((b) => b.name === a.name) === i);
   const stamp: Stamp = { pin: `${pin.repo}@${pin.tag}`, target: t.name, dev: sel.dev === true, sha256: assets.map((a) => a.sha256) };
   const was = readStamp(join(target, STAMP));
   if (was && was.pin === stamp.pin && was.target === stamp.target && was.dev === stamp.dev) {

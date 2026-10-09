@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write # update.yml dispatches ci.yml on the PR's branch
   contents: write
   pull-requests: write
 

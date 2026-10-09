@@ -11,7 +11,7 @@ const table: LicenseTable = new Map([
   ['LGPL-3.0-or-later', ['lgplv3', 'gplv3', 'nonfree']],
 ]);
 
-import { optionLicenses } from '../src/resolve.ts';
+import { availability, optionLicenses } from '../src/resolve.ts';
 describe('SPDX expressions', () => {
   it.each([
     ['MIT', [...ALL]],
@@ -92,5 +92,17 @@ describe('licence exceptions', () => {
 
   it('lets the NDK libc++ that Android archives ship go into every license', () => {
     expect(allowedBy('Apache-2.0 WITH LLVM-exception', fixtureData().licenses)).toEqual({ allowed: ['lgplv2', 'lgplv3', 'gplv2', 'gplv3', 'nonfree'] });
+  });
+});
+
+describe("FFmpeg's gplv3 class (EXTERNAL_LIBRARY_GPLV3_LIST)", () => {
+  const d = () => loadEngineData(writeEngine({ 'ffmpeg/9.yml': 'major: 9\nreleases: [9.0.0]\noptions:\n  smb: { builtin: true, ffmpeg-license: gplv3 }\n' }));
+
+  it('needs a gpl and version 3 build licence: gplv3 or nonfree', () => {
+    expect(optionLicenses(d(), '9', 'smb')).toEqual(['gplv3', 'nonfree']);
+    const cell = { series: '9', major: '9', version: '9.0.0', platform: 'linux-x64' };
+    expect(availability(d(), { ...cell, license: 'gplv2' }, 'smb')).toEqual({ kind: 'license', reason: "smb is GPL version 3 only (gplv3 or nonfree) (FFmpeg's own classification)" });
+    expect(availability(d(), { ...cell, license: 'lgplv3' }, 'smb')?.kind).toBe('license');
+    expect(availability(d(), { ...cell, license: 'gplv3' }, 'smb')).toBeUndefined();
   });
 });

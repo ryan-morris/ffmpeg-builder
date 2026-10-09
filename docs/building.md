@@ -9,8 +9,20 @@ import libraries, pkg-config files) to `--out` (default `dist`). It needs `ffmpe
 `ffmpeg-build test --target <name>` runs a build where this machine can run it: a smoke test (the programs start, the
 configure line matches the license, a one-second test pattern encodes), then each script the target lists in
 `tests:`, with `FFMPEG`, `FFPROBE` and `FFMPEG_DIR` set to the unpacked build. A non-zero exit fails it. A build for
-another platform (Android, iOS, Windows on a Linux machine) is skipped, and says so; CI tests each target on its own
-runner right after building it.
+another platform (Android, iOS, Windows on a Linux machine) is skipped, and says so. A linux-musl-x64 build on a glibc
+linux-x64 machine with Docker runs in a plain Alpine container instead (the image the musl toolchain starts from,
+pinned by the same digest; Alpine has no bash, so a `.sh` test installs it in the container first).
+
+On Windows, `.sh` tests run with Git Bash (`BASH`, else the one beside `git`, else the usual install folders; never
+WSL's `bash.exe`), `.cmd` and `.bat` with `cmd.exe`, and `.ps1` with `pwsh` (or Windows PowerShell). Elsewhere every
+test runs with `bash`.
+
+CI tests each target right after building it, on the runner it builds on (`platforms.yml` `runner:`), so only where
+that runner can run the build: linux-x64, linux-musl-x64 (in Alpine, on the linux-x64 runner), linux-arm64,
+osx-arm64 and osx-x64 (under Rosetta on the Apple-silicon runner, where it is installed). The rest are built but not
+run in CI, and the test step says it skipped them: linux-musl-arm64 (built on a glibc arm64 runner), linux-armhf,
+win-x64 and win-arm64 (cross-compiled on Linux), android-arm64 and android-x64, and the iOS and Mac Catalyst
+frameworks.
 
 ## Toolchains
 
