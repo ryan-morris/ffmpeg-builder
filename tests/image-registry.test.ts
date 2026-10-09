@@ -20,4 +20,13 @@ describe('images', () => {
     const hub = [...images, ...workflows, `BINFMT: ${BINFMT}`].filter((x) => registryOf(x.split(': ')[1]!) === 'docker.io');
     expect(hub).toEqual([]);
   });
+
+  it('the docs tell people to pull from those registries too', () => {
+    const docs = ['README.md', 'CONTRIBUTING.md', ...readdirSync(join(packageRoot, 'docs')).filter((f) => f.endsWith('.md')).map((f) => `docs/${f}`)];
+    const hub = docs.flatMap((f) =>
+      // the image a `docker run ... --rm <image>` line names (a $VARIABLE is checked where it is set)
+      [...readFileSync(join(packageRoot, f), 'utf8').matchAll(/docker run\b[^\n]*?--rm\s+(?:--platform[= ]\S+\s+)?([^\s$-]\S*)/g)].map((m) => `${f}: ${m[1]}`))
+      .filter((x) => registryOf(x.split(': ')[1]!) === 'docker.io');
+    expect(hub).toEqual([]);
+  });
 });

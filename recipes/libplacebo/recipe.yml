@@ -8,5 +8,6 @@ configure: [--enable-libplacebo]
 needs: [vulkan-headers, shaderc, lcms2]
 source: { git: https://github.com/haasn/libplacebo, ref: "v{version}" }
 versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
-# Upstream: BUILD_LIBPLACEBO = BUILD_VULKAN, minus the lean ios-sim-arm64 slice.
-platforms: [linux-*, win-*, osx-*, ios-arm64, maccatalyst-*, android-*]
+# Upstream: BUILD_LIBPLACEBO = BUILD_VULKAN. FFmpeg's libplacebo filter needs Vulkan, which no Apple build has here
+# (no MoltenVK), so it isn't offered there.
+platforms: [linux-*, win-*, android-*]

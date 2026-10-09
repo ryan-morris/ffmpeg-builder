@@ -95,7 +95,7 @@ Register it (again after every Docker restart, which forgets it), replacing any 
     docker run --privileged --rm $BINFMT --uninstall qemu-aarch64
     docker run --privileged --rm $BINFMT --install arm64
     # Registered? ("enabled" and its interpreter; the qemu version isn't shown)
-    docker run --privileged --rm alpine sh -c \
+    docker run --privileged --rm mirror.gcr.io/library/alpine:3.24.2 sh -c \
       'mount -t binfmt_misc binfmt_misc /proc/sys/fs/binfmt_misc; cat /proc/sys/fs/binfmt_misc/qemu-aarch64'
     # A qemu that works: prints ok (qemu 9.2 prints "Cannot mkdir: Invalid argument")
     docker run --rm --platform linux/arm64 quay.io/pypa/manylinux_2_28_aarch64:2026.09.30-1 \

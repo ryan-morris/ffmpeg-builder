@@ -93,12 +93,13 @@ jobs:
           else
             gh pr create --head "${BRANCH}" --title "${title}" --body-file "${RUNNER_TEMP}/pr.md"
           fi
-          # the PR's CI: a token's push starts it; GITHUB_TOKEN's pushes start nothing, but it may dispatch a run
-          if [ "${HAS_TOKEN}" != true ] && [ -n "${CI_WORKFLOW}" ]; then
-            GH_TOKEN="${DISPATCH_TOKEN}" gh workflow run "${CI_WORKFLOW}" --ref "${BRANCH}"
-          fi
-          # automerge: the label the automerge workflow looks for once the PR's CI passes (no repository settings needed)
+          # automerge: the label the automerge job looks for once the PR's CI passes (no repository settings needed);
+          # added before CI is started, so even a quick CI run finds it
           if [ "${AUTOMERGE}" = true ]; then
             gh label create "${LABEL}" --force --color 0e8a16 --description "ffmpeg-build merges this PR once its CI passes"
             gh pr edit "${BRANCH}" --add-label "${LABEL}"
+          fi
+          # the PR's CI: a token's push starts it; GITHUB_TOKEN's pushes start nothing, but it may dispatch a run
+          if [ "${HAS_TOKEN}" != true ] && [ -n "${CI_WORKFLOW}" ]; then
+            GH_TOKEN="${DISPATCH_TOKEN}" gh workflow run "${CI_WORKFLOW}" --ref "${BRANCH}"
           fi

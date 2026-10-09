@@ -174,7 +174,7 @@ describe('Windows Vulkan', () => {
 });
 
 // The Khronos loader's recipe ships a Linux libvulkan.so only (no MoltenVK), so Vulkan isn't offered on any Apple
-// platform; libplacebo builds against the headers, not the loader, so it stays (its FFmpeg filter needs Vulkan).
+// platform; nor is libplacebo, whose FFmpeg filter needs Vulkan (it would build, and add nothing).
 describe("Vulkan isn't offered on Apple", () => {
   const apple = /^(osx|ios|maccatalyst)-/;
   it('options --json lists no Apple platform for vulkan or the loader', () => {
@@ -183,7 +183,16 @@ describe("Vulkan isn't offered on Apple", () => {
     expect((vulkan.libraries ?? []).flatMap((l) => l.platforms).filter((p) => apple.test(p))).toEqual([]);
     expect(data.recipes.get('vulkan-loader')!.platforms.some((p) => p.startsWith('osx-'))).toBe(false);
     const placebo = optionFacts(data, '9').find((o) => o.name === 'placebo')!;
-    expect(placebo.platforms).toContain('osx-arm64');
+    expect(placebo.platforms.filter((p) => apple.test(p))).toEqual([]);
+    expect(placebo.platforms).toContain('linux-x64');
+  });
+
+  it('check says a macOS target with placebo has no library for it there', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ffmpeg-build-mac-placebo-'));
+    writeFileSync(join(dir, 'ffmpeg-build.yml'), 'targets:\n  mac: { platform: osx-arm64, license: lgplv3, ffmpeg: 9, with: [placebo] }\n');
+    const r = runCli(['check'], { cwd: dir });
+    expect(r.stdout).toContain("not on osx-arm64: the libplacebo recipe doesn't build there");
+    expect(r.exitCode).toBe(1);
   });
 
   it('check says a macOS target with vulkan has no library for it there', () => {
