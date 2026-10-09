@@ -3,7 +3,7 @@
 # An arm64 image: it runs natively on an arm64 host and under qemu on an x64 one, as upstream builds it on arm64
 # runners. Artifacts link libgcc and libstdc++ statically, so they run on any musl system. The library cache keys on
 # this image's Docker ID.
-FROM --platform=linux/arm64 alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+FROM --platform=linux/arm64 mirror.gcr.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
 # bash, jq and GNU findutils/coreutils/tar/sed/grep for the driver (BusyBox lacks find -printf and friends);
 # xxd for libvmaf's built-in models; python3 for meson. Alpine's own glslc is new enough (probed below).

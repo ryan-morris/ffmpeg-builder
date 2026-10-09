@@ -62,7 +62,7 @@ export function containerFor(platform: string, runnable: string[]): Container | 
 }
 
 /** The qemu that runs arm64 builds on x64 hosts (docs/building.md); `--install arm` lets Docker start armhf containers. */
-export const BINFMT = 'tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f';
+export const BINFMT = 'mirror.gcr.io/tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f';
 
 function hasRosetta(): boolean {
   if (process.platform !== 'darwin') return false;

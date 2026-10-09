@@ -2,7 +2,7 @@
 # as upstream devenvy/ffmpeg does on an ubuntu-latest runner (platform/windows.sh, 03_install_packages.sh). Upstream
 # leaves both toolchains unpinned; here the base is pinned by digest and llvm-mingw by version and SHA-256. Ubuntu's
 # mingw-w64 packages come with the base's apt archive; the library cache keys on this image's Docker ID.
-FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+FROM mirror.gcr.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
 
 ENV DEBIAN_FRONTEND=noninteractive
 # mingw-w64 (gcc-win32 / g++-win32, binutils), mingw-w64-tools (gendef), llvm (llvm-dlltool for MSVC .lib import

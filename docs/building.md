@@ -18,7 +18,7 @@ from, pinned by the same digest: a musl build of the machine's architecture in p
 x64 machine (and on arm64 CPUs without 32-bit ARM, like GitHub's arm64 runners) the armhf container needs qemu for
 32-bit ARM, which the test says how to register when it is missing:
 
-    docker run --privileged --rm tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f --install arm
+    docker run --privileged --rm mirror.gcr.io/tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f --install arm
 
 Android, iOS and Mac Catalyst builds are libraries, with no programs to run. For them `test` links a small C program
 ([`platforms/test/smoke.c`](../platforms/test/smoke.c)) against the build with the platform's own toolchain (the
@@ -91,7 +91,7 @@ arm64 runners instead), with qemu 8.1.5: under qemu 9.2 the manylinux image's ta
 Register it (again after every Docker restart, which forgets it), replacing any arm64 emulator already there
 (`--install` fails with "file exists" when qemu-user-static or Docker Desktop registered one, and the old one stays):
 
-    BINFMT=tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f
+    BINFMT=mirror.gcr.io/tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f
     docker run --privileged --rm $BINFMT --uninstall qemu-aarch64
     docker run --privileged --rm $BINFMT --install arm64
     # Registered? ("enabled" and its interpreter; the qemu version isn't shown)

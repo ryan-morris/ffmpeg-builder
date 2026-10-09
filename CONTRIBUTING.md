@@ -56,6 +56,9 @@ fails when it is stale).
   reason.
 - **A new library** needs its recipe's `license-files:` (the licence texts in its source, which `THIRD-PARTY-NOTICES.txt` carries) and its
   SPDX licence in `recipe.yml`; `check` and the licence table do the rest.
+- **An image** (a Dockerfile's `FROM`, a container a workflow runs) is pinned by digest and never pulled from Docker
+  Hub directly: CI runners share addresses and hit its anonymous pull limit. Use Docker Hub images through
+  `mirror.gcr.io` (`mirror.gcr.io/library/alpine:...@sha256:...`); `tests/image-registry.test.ts` checks.
 - **The `ffmpeg-build.yml` format** is a public interface: describe the change in an issue first, and give it a
   `migrate` path if existing folders would break.
 

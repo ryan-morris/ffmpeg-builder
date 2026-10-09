@@ -20,7 +20,7 @@ platforms:
     runner: ubuntu-24.04
     configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-pthreads, --enable-pic, "--extra-libs=-lpthread -ldl", --extra-ldflags=-static-libgcc]
   # 64-bit ARM: built natively in arm64 images, as upstream does on arm64 runners. An x64 host runs them under qemu
-  # 8.1.5 (qemu 9.2 breaks the manylinux image's tar), registered with tonistiigi/binfmt:qemu-v8.1.5@sha256:
+  # 8.1.5 (qemu 9.2 breaks the manylinux image's tar), registered with mirror.gcr.io/tonistiigi/binfmt:qemu-v8.1.5@sha256:
   # 2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f: the README says how.
   linux-arm64:
     image: linux-arm64

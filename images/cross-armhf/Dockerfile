@@ -1,7 +1,7 @@
 # The linux-armhf toolchain image: cross-compiles 32-bit ARM with Debian bookworm's crossbuild-essential-armhf, as
 # upstream devenvy/ffmpeg does (its linux-armhf job runs in this same pinned image), so artifacts need glibc 2.36+.
 # The library cache keys on this image's Docker ID.
-FROM debian:bookworm@sha256:f37a335e82bca302e955fa39f9dfe28f1be618f016f8a2b56318e5a5111afc26
+FROM mirror.gcr.io/library/debian:bookworm@sha256:f37a335e82bca302e955fa39f9dfe28f1be618f016f8a2b56318e5a5111afc26
 
 ENV DEBIAN_FRONTEND=noninteractive
 # The cross gcc and the build tools upstream installs; a native gcc/g++ for host tools (glslc below, nettle's helpers);

@@ -72,7 +72,7 @@ describe('ffmpeg-build test', () => {
   });
 
   it('runs a musl x64 build in the pinned Alpine on a glibc x64 machine with Docker, and says so without Docker', () => {
-    expect(muslImage()).toMatch(/^alpine:[\d.]+@sha256:[0-9a-f]{64}$/);
+    expect(muslImage()).toMatch(/^mirror\.gcr\.io\/library\/alpine:[\d.]+@sha256:[0-9a-f]{64}$/);
     expect(dockerArgs('alpine@sha256:x', ['/b', '/f'], '/f', { FFMPEG: '/b/bin/ffmpeg' }, '/b/bin/ffmpeg', ['-version'])).toEqual([
       'run', '--rm', '--network', 'none', '-v', '/b:/b:ro', '-v', '/f:/f:ro', '-w', '/f', '-e', 'FFMPEG=/b/bin/ffmpeg', 'alpine@sha256:x', '/b/bin/ffmpeg', '-version',
     ]);
@@ -93,7 +93,7 @@ describe('ffmpeg-build test', () => {
     expect(containerFor('linux-x64', ['linux-x64'])).toBeUndefined();
     // the images the toolchains start from, pinned by the same (multi-platform) digest
     expect(baseImage('linux-musl-arm64')).toBe(muslImage());
-    expect(baseImage('cross-armhf')).toMatch(/^debian:bookworm@sha256:[0-9a-f]{64}$/);
+    expect(baseImage('cross-armhf')).toMatch(/^mirror\.gcr\.io\/library\/debian:bookworm@sha256:[0-9a-f]{64}$/);
     expect(dockerArgs('i', ['/b'], '/b', {}, 'sh', [], false, 'linux/arm/v7')).toEqual(['run', '--rm', '--network', 'none', '--platform', 'linux/arm/v7', '-v', '/b:/b:ro', '-w', '/b', 'i', 'sh']);
   });
 
