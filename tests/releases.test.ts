@@ -130,3 +130,23 @@ describe('ffmpeg-build releases', () => {
     expect((await runCliAsync(['releases'], { cwd: d, env: { ...noRepo, GITHUB_REPOSITORY: '' } })).stdout).toContain('9.1.0.0: due');
   });
 });
+
+describe('a patch set', () => {
+  it('has the same sha256 in the release plan as the build records', async () => {
+    const { mkdirSync } = await import('node:fs');
+    const { plannedPatches } = await import('../src/build/plan.ts');
+    const { targetFacts } = await import('../src/release.ts');
+    const { targetProfile } = await import('../src/targets.ts');
+    const d = folder('targets:\n  t: { platform: linux-x64, license: nonfree, ffmpeg: 9, with: [dav1d], patches: [patches/acme] }\n');
+    mkdirSync(join(d, 'patches', 'acme', '9'), { recursive: true });
+    writeFileSync(join(d, 'patches', 'acme', 'about.yml'), 'name: acme\nlicense: proprietary\nlicense-files: [LICENSE]\nffmpeg: 9\n');
+    writeFileSync(join(d, 'patches', 'acme', 'LICENSE'), 'all rights reserved\n');
+    writeFileSync(join(d, 'patches', 'acme', '9', '0001-a.patch'), '--- /dev/null\n+++ b/A\n@@ -0,0 +1 @@\n+a\n');
+    const r = loadFolder(d);
+    if (!r.ok) throw new Error(r.errors.join('\n'));
+    const t = r.folder.targets.find((x) => x.name === 't')!;
+    const f = targetFacts(r.folder, t, data, LOCK, packageRoot);
+    if ('error' in f) throw new Error(f.error);
+    expect(plannedPatches(targetProfile(r.folder, t), '9').map((p) => p.sha256)).toEqual(f.facts.patches.map((p) => p.sha256));
+  });
+});

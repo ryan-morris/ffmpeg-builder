@@ -1,7 +1,6 @@
 // Releases: which targets ship together, what each one is made of, and whether a release is due. A release is one
 // release group at one resolved FFmpeg version; its tag is `[<group>-]<ffmpeg>.<build>`.
-import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { setupFiles } from './build/plan.ts';
 import { versionInCell } from './choose.ts';
@@ -11,6 +10,9 @@ import type { Manifest, ManifestTarget } from './manifest.ts';
 import { packageVersion } from './paths.ts';
 import { planProfile, type CellPlan } from './resolve.ts';
 import { targetProfile, type Folder, type Target } from './targets.ts';
+import { sha, treeHash } from './tree-hash.ts';
+
+export { treeHash };
 
 /** What a target's build is made of: if any of it differs from the last release, the release is due. */
 export interface TargetFacts {
@@ -93,31 +95,6 @@ export interface PublishedTarget {
   facts: TargetFacts;
   slices: PlannedTarget[]; // the builds behind it: one, or a licence's framework slices
   allowRemoval: string[];
-}
-
-const sha = (...parts: (string | Buffer)[]) => {
-  const h = createHash('sha256');
-  for (const p of parts) h.update(p).update('\0');
-  return h.digest('hex');
-};
-
-/** Every file under `dir`, sorted, with its path relative to `dir`. */
-function filesUnder(dir: string): string[] {
-  const out: string[] = [];
-  const walk = (d: string) => {
-    for (const e of readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      const p = join(d, e.name);
-      if (e.isDirectory()) walk(p);
-      else out.push(p);
-    }
-  };
-  if (existsSync(dir) && statSync(dir).isDirectory()) walk(dir);
-  return out;
-}
-
-/** A hash of every file of a folder (names and contents), stable across machines. */
-export function treeHash(dir: string): string {
-  return sha(...filesUnder(dir).flatMap((f) => [relative(dir, f).replaceAll('\\', '/'), readFileSync(f)]));
 }
 
 /**

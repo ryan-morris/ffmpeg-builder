@@ -11,6 +11,7 @@ import type { Profile } from '../profile.ts';
 import { availability, type CellPlan } from '../resolve.ts';
 import type { LicenseFile } from '../schema/engine.ts';
 import type { License } from '../schema/profile.ts';
+import { treeHash } from '../tree-hash.ts';
 import { unique } from '../text.ts';
 import { parseYaml } from '../yaml.ts';
 
@@ -173,8 +174,8 @@ function setupOf(data: EngineData, platform: string): string {
 }
 
 /**
- * A patch set the target names: its folder's name, its licence (about.yml), a hash of its patches for this FFmpeg
- * major, those patches (in name order, applied in that order) and its licence texts.
+ * A patch set the target names: its folder's name, its licence (about.yml), a hash of the whole set (as releases
+ * compare it), its patches for this FFmpeg major (in name order, applied in that order) and its licence texts.
  */
 export interface PlannedPatchSet { name: string; license: string; sha256: string; files: { name: string; text: string }[]; licenses: { path: string; text: string }[] }
 
@@ -364,14 +365,12 @@ export function plannedPatches(profile: Profile, major: string): PlannedPatchSet
   return profile.patches.map((p) => {
     const dir = join(profile.dir ?? '.', p);
     const about = aboutSchema.parse(parseYaml(readFileSync(join(dir, 'about.yml'), 'utf8'), `${p}/about.yml`));
-    const hash = createHash('sha256');
     const patchDir = join(dir, major);
-    if (existsSync(patchDir)) for (const file of filesUnder(patchDir)) hash.update(`${file}\0`).update(readFileSync(join(patchDir, file))).update('\0');
     const files = existsSync(patchDir) ? filesUnder(patchDir).filter((f) => /\.(patch|diff)$/.test(f)).sort() : [];
     return {
       name: basename(dir),
       license: about.license,
-      sha256: hash.digest('hex'),
+      sha256: treeHash(dir), // the whole set (about.yml, licences, every major's patches): what releases compare
       files: files.map((f) => ({ name: f, text: readFileSync(join(patchDir, f), 'utf8') })),
       licenses: about['license-files'].map((path) => ({ path, text: readFileSync(join(dir, path), 'utf8') })),
     };
