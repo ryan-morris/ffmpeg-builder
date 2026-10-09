@@ -2,5 +2,5 @@
 engine: 0.2.0
 ffmpeg: { "9": 9.0.2 }
 libraries:
-  dav1d: 1.5.3
+  dav1d: 1.5.4
   opus: 1.6.1
