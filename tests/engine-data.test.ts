@@ -5,6 +5,7 @@ import { buildOrder, EngineDataError, ffmpegVersionSource, knownMajors, loadEngi
 import { packageRoot } from '../src/paths.ts';
 import { fixtureData, fixtureProfilesDir, writeEngine } from './helpers.ts';
 import { cellBuildOrder } from '../src/resolve.ts';
+import { runnerOf, testRunnerOf, toolchainDefinition } from '../src/release.ts';
 
 const okFfmpeg = 'major: 9\nreleases: [9.0.0]\noptions: {}\n';
 const okRecipe = (name: string, extra = '') =>
@@ -30,6 +31,21 @@ describe('engine data', () => {
 
   it('loads the engine data shipped in this repo', () => {
     expect(() => loadEngineData(packageRoot)).not.toThrow();
+  });
+
+  it("knows the CI runner that runs each platform's builds when its build runner can't", () => {
+    const data = loadEngineData(packageRoot);
+    const test = (p: string) => testRunnerOf(data, p);
+    expect([test('win-x64'), test('win-arm64')]).toEqual(['windows-2025', 'windows-11-arm']);
+    // the rest are run (or linked against) on the runner they build on: containers, the emulator, the simulator
+    for (const p of ['linux-x64', 'linux-armhf', 'linux-musl-x64', 'linux-musl-arm64', 'linux-arm64', 'android-arm64', 'android-x64', 'osx-arm64', 'osx-x64', 'ios-arm64', 'ios-sim-arm64', 'maccatalyst-arm64', 'maccatalyst-x64']) {
+      expect(test(p), p).toBe(runnerOf(data, p));
+    }
+    // where a build is tested isn't what it is made of: the toolchain (and so every release) doesn't change with it
+    const entry = data.platforms.get('win-x64')!;
+    const before = toolchainDefinition(packageRoot, data, 'win-x64');
+    data.platforms.set('win-x64', { ...entry, testRunner: 'windows-2022' });
+    expect(toolchainDefinition(packageRoot, data, 'win-x64')).toBe(before);
   });
 
   it('takes the group from the recipe into the option', () => {

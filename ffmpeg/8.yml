@@ -33,9 +33,9 @@ options:
   vaapi:       { needs: libva, platforms: [linux-*] }
   drm:         { needs: libdrm, platforms: [linux-*] }
   vpl:         { needs: libvpl, min: 2.6.0 }
-  # FFmpeg's Vulkan: the Khronos loader on linux and osx; on Windows, linux-armhf and Android only the headers (FFmpeg
-  # loads the system's Vulkan library at run time)
-  vulkan:      { needs: [{ vulkan-loader: { platforms: [linux-x64, linux-arm64, linux-musl-*, osx-*] } }, { vulkan-headers: { platforms: [win-*, linux-armhf, android-*] } }], min: 1.3.277, configure: [--enable-vulkan] }
+  # FFmpeg's Vulkan: the Khronos loader on glibc and musl Linux; on Windows, linux-armhf and Android only the headers
+  # (FFmpeg loads the system's Vulkan library at run time). Not on Apple: upstream used MoltenVK, which isn't built.
+  vulkan:      { needs: [{ vulkan-loader: { platforms: [linux-x64, linux-arm64, linux-musl-*] } }, { vulkan-headers: { platforms: [win-*, linux-armhf, android-*] } }], min: 1.3.277, configure: [--enable-vulkan] }
   placebo:     { needs: libplacebo, min: 5.229.0 }
   # FFmpeg 8.x only gets its Vulkan filters' shader compiler through libshaderc
   shaderc:     { needs: shaderc, min: 2019.1 }

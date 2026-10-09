@@ -121,6 +121,7 @@ export const platformsSchema = z.strictObject({
       image: text,
       setup: name,
       runner: text.optional(), // the CI runner it builds on (default ubuntu-24.04)
+      'test-runner': text.optional(), // the CI runner that runs its builds, when the one it builds on can't (default: runner)
       configure: z.array(text).optional(),
       // files the archives carry besides FFmpeg's and the recipes': name -> its SPDX licence and its notice file, a path
       // in the toolchain where ${VAR} is a variable of the platform's setup (its text goes into THIRD-PARTY-NOTICES.txt)
@@ -129,4 +130,4 @@ export const platformsSchema = z.strictObject({
   ),
 });
 export interface Shipped { license: string; notice: string }
-export type PlatformEntry = { image: string; setup: string; runner?: string; configure: string[]; ships: Record<string, Shipped> };
+export type PlatformEntry = { image: string; setup: string; runner?: string; testRunner?: string; configure: string[]; ships: Record<string, Shipped> };

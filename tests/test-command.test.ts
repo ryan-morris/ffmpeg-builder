@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { dockerArgs, gitBash, isMusl, missingLicenseFlags, muslImage, runnablePlatforms, runTest, scriptCommand, versionMatches } from '../src/commands/test.ts';
+import { baseImage, containerFor, dockerArgs, gitBash, isMusl, missingLicenseFlags, muslImage, runnablePlatforms, runTest, scriptCommand, versionMatches } from '../src/commands/test.ts';
+import { androidSmoke, appleSmoke, libraryRun, pickSimulator, smokeResult } from '../src/commands/test-library.ts';
 import { formatFolderLock } from '../src/lockfile.ts';
 import { loadFolder } from '../src/targets.ts';
 import { tarGz } from './github-fake.ts';
@@ -44,8 +45,11 @@ describe('ffmpeg-build test', () => {
   it('knows which builds this machine can run', () => {
     expect(runnablePlatforms('linux', 'x64', false, false)).toEqual(['linux-x64']);
     expect(runnablePlatforms('linux', 'x64', true, false)).toEqual(['linux-musl-x64']);
-    expect(runnablePlatforms('darwin', 'arm64', false, true)).toEqual(['osx-arm64', 'osx-x64']);
-    expect(runnablePlatforms('darwin', 'arm64', false, false)).toEqual(['osx-arm64']);
+    // a Mac runs Mac Catalyst builds as its own processes, and iOS simulator builds in the simulator (Apple silicon)
+    expect(runnablePlatforms('darwin', 'arm64', false, true)).toEqual(['osx-arm64', 'maccatalyst-arm64', 'ios-sim-arm64', 'osx-x64', 'maccatalyst-x64']);
+    expect(runnablePlatforms('darwin', 'arm64', false, false)).toEqual(['osx-arm64', 'maccatalyst-arm64', 'ios-sim-arm64']);
+    expect(runnablePlatforms('darwin', 'x64', false, false)).toEqual(['osx-x64', 'maccatalyst-x64']);
+    expect(runnablePlatforms('win32', 'x64', false, false)).toEqual(['win-x64']);
     expect(runnablePlatforms('win32', 'arm64', false, false)).toEqual(['win-arm64', 'win-x64']);
     expect(runnablePlatforms('linux', 'arm', false, false)).toEqual(['linux-armhf']);
     expect(runnablePlatforms('linux', 'arm', true, false)).toEqual([]); // no musl armhf build
@@ -76,6 +80,99 @@ describe('ffmpeg-build test', () => {
     writeFileSync(join(d, 'ffmpeg-build.yml'), 'targets:\n  t: { platform: linux-musl-x64, license: lgplv3, ffmpeg: 9, with: [dav1d] }\n');
     expect(runTest(folderOf(d), data, { target: 't', dist: join(d, 'dist'), runnable: ['linux-x64'], docker: false }).output)
       .toBe("t: skipped, linux-musl-x64 builds don't run on this machine (it runs linux-x64) (with Docker it would run in an Alpine container)");
+  });
+
+  it('runs musl and armhf builds in containers on a glibc Linux machine: Alpine for musl, Debian armhf for armhf', () => {
+    expect(containerFor('linux-musl-x64', ['linux-x64'])).toEqual({ image: 'linux-musl-x64', dockerPlatform: 'linux/amd64', bash: 'apk' });
+    expect(containerFor('linux-musl-arm64', ['linux-arm64'])).toEqual({ image: 'linux-musl-arm64', dockerPlatform: 'linux/arm64', bash: 'apk' });
+    // 32-bit ARM userspace: under qemu on x64, and on arm64 too (GitHub's arm64 runners can't run AArch32 natively)
+    expect(containerFor('linux-armhf', ['linux-x64'])).toEqual({ image: 'cross-armhf', dockerPlatform: 'linux/arm/v7', bash: 'present' });
+    expect(containerFor('linux-armhf', ['linux-arm64'])).toEqual({ image: 'cross-armhf', dockerPlatform: 'linux/arm/v7', bash: 'present' });
+    expect(containerFor('linux-musl-arm64', ['linux-x64'])).toBeUndefined();
+    expect(containerFor('linux-musl-x64', ['linux-musl-x64'])).toBeUndefined();
+    expect(containerFor('linux-x64', ['linux-x64'])).toBeUndefined();
+    // the images the toolchains start from, pinned by the same (multi-platform) digest
+    expect(baseImage('linux-musl-arm64')).toBe(muslImage());
+    expect(baseImage('cross-armhf')).toMatch(/^debian:bookworm@sha256:[0-9a-f]{64}$/);
+    expect(dockerArgs('i', ['/b'], '/b', {}, 'sh', [], false, 'linux/arm/v7')).toEqual(['run', '--rm', '--network', 'none', '--platform', 'linux/arm/v7', '-v', '/b:/b:ro', '-w', '/b', 'i', 'sh']);
+  });
+
+  it("skips an armhf build when Docker can't start an armhf container, saying how to register qemu", () => {
+    const d = built();
+    writeFileSync(join(d, 'ffmpeg-build.yml'), 'targets:\n  t: { platform: linux-armhf, license: lgplv3, ffmpeg: 9, with: [dav1d] }\n');
+    const r = runTest(folderOf(d), data, { target: 't', dist: join(d, 'dist'), runnable: ['linux-x64'], docker: true, armhf: false });
+    expect(r.output).toContain("t: skipped, this machine's Docker can't start a linux/arm/v7 container");
+    expect(r.output).toContain('--install arm');
+    expect(r.exitCode).toBe(0);
+  });
+
+  it('fails instead of skipping with --must-run (CI, on the runner meant to run the build)', () => {
+    const d = built();
+    const r = runTest(folderOf(d), data, { target: 't', dist: join(d, 'dist'), runnable: ['win-x64'], mustRun: true });
+    expect(r.output).toBe("t: ✗ not run, linux-x64 builds don't run on this machine (it runs win-x64), and --must-run says it must");
+    expect(r.exitCode).toBe(1);
+  });
+
+  it('links the smoke program against an Android build with the NDK, and runs it on a device with that ABI', () => {
+    expect(androidSmoke('android-arm64', '/ndk', 'linux-x86_64', '/run', '/out/smoke', '/src/smoke.c')).toEqual({
+      cmd: '/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang',
+      args: ['/src/smoke.c', '-I', '/run/include', '-L', '/run/lib/arm64-v8a', '-lavformat', '-lavfilter', '-lavcodec', '-lswscale', '-lswresample', '-lavutil', '-Wl,-rpath,/data/local/tmp/ffmpeg-build-test', '-o', '/out/smoke'],
+    });
+    expect(androidSmoke('android-x64', '/ndk', 'linux-x86_64', '/run', '/o', '/s.c').cmd).toBe('/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android28-clang');
+  });
+
+  it('links the smoke program against iOS and Mac Catalyst frameworks with the SDK of each', () => {
+    expect(appleSmoke('ios-arm64', '/sdk', '/run', '/dev/include', '/o', '/s.c')).toEqual({
+      cmd: 'xcrun',
+      args: ['--sdk', 'iphoneos', 'clang', '-arch', 'arm64', '-miphoneos-version-min=13.0', '-isysroot', '/sdk', '/s.c', '-I', '/dev/include', '-F', '/run',
+        '-framework', 'libavformat', '-framework', 'libavfilter', '-framework', 'libavcodec', '-framework', 'libswscale', '-framework', 'libswresample', '-framework', 'libavutil', '-Wl,-rpath,/run', '-o', '/o'],
+    });
+    expect(appleSmoke('ios-sim-arm64', '/sdk', '/run', undefined, '/o', '/s.c').args.slice(0, 6)).toEqual(['--sdk', 'iphonesimulator', 'clang', '-arch', 'arm64', '-mios-simulator-version-min=13.0']);
+    expect(appleSmoke('maccatalyst-x64', '/sdk', '/run', undefined, '/o', '/s.c').args.slice(0, 11)).toEqual([
+      '--sdk', 'macosx', 'clang', '-target', 'x86_64-apple-ios14.0-macabi', '-isysroot', '/sdk', '-iframework', '/sdk/System/iOSSupport/System/Library/Frameworks', '-L', '/sdk/System/iOSSupport/usr/lib',
+    ]);
+  });
+
+  it('says where each library build can run: here, under Rosetta, in the simulator, on a device, or nowhere', () => {
+    expect(libraryRun('maccatalyst-arm64', 'darwin', 'arm64', false)).toEqual({ where: 'here' });
+    expect(libraryRun('maccatalyst-x64', 'darwin', 'arm64', true)).toEqual({ where: 'rosetta' });
+    expect(libraryRun('maccatalyst-x64', 'darwin', 'arm64', false)).toEqual({ where: 'nowhere', why: "an x86_64 Mac Catalyst build runs on Apple silicon only under Rosetta, which isn't installed (softwareupdate --install-rosetta --agree-to-license)" });
+    expect(libraryRun('ios-sim-arm64', 'darwin', 'arm64', false)).toEqual({ where: 'simulator' });
+    expect(libraryRun('ios-sim-arm64', 'darwin', 'x64', false)).toMatchObject({ where: 'nowhere' });
+    expect(libraryRun('ios-arm64', 'darwin', 'arm64', false)).toEqual({ where: 'never', why: 'iOS device builds run only on an iOS device' });
+    expect(libraryRun('android-arm64', 'linux', 'x64', false)).toEqual({ where: 'device' });
+  });
+
+  it('picks the newest available iOS runtime and an iPhone it supports', () => {
+    const runtimes = { runtimes: [
+      { name: 'iOS 17.5', identifier: 'rt.17', isAvailable: true, supportedDeviceTypes: [{ name: 'iPhone 15', identifier: 'dt.15' }] },
+      { name: 'watchOS 11', identifier: 'rt.w', isAvailable: true, supportedDeviceTypes: [{ name: 'Apple Watch', identifier: 'dt.w' }] },
+      { name: 'iOS 18.2', identifier: 'rt.18', isAvailable: true, supportedDeviceTypes: [{ name: 'iPad Pro', identifier: 'dt.ipad' }, { name: 'iPhone 16', identifier: 'dt.16' }] },
+      { name: 'iOS 19.0', identifier: 'rt.19', isAvailable: false, supportedDeviceTypes: [{ name: 'iPhone 17', identifier: 'dt.17' }] },
+    ] };
+    expect(pickSimulator(runtimes)).toEqual({ runtime: 'rt.18', deviceType: 'dt.16' });
+    expect(pickSimulator({ runtimes: [] })).toBeUndefined();
+  });
+
+  it("reads the smoke program's output as the program checks read ffmpeg's: version, licence flags, ok", () => {
+    const out = 'ffmpeg version 9.1.0\nconfiguration: --disable-gpl --enable-version3 --disable-nonfree\nsmoke: ok\n';
+    expect(smokeResult(0, out, '9.1.0', 'lgplv3')).toEqual([
+      { ok: true, what: 'it says FFmpeg 9.1.0' },
+      { ok: true, what: 'its configure line matches lgplv3' },
+      { ok: true, what: 'it encodes, decodes and finds the built-in components' },
+    ]);
+    expect(smokeResult(1, 'ffmpeg version 9.1.0\nconfiguration: --enable-gpl\nsmoke: FAIL no mpeg4 encoder or decoder\n', '9.1.0', 'lgplv3').map((s) => s.ok)).toEqual([true, false, false]);
+  });
+
+  it('skips an Android build without the NDK, and fails it with --must-run', () => {
+    const d = built();
+    writeFileSync(join(d, 'ffmpeg-build.yml'), 'targets:\n  t: { platform: android-arm64, license: lgplv3, ffmpeg: 9, with: [dav1d] }\n');
+    writeFileSync(join(d, 'dist', 'ffmpeg-9.1.0-t.tar.gz'), tarGz([{ name: 'lib/arm64-v8a/libavutil.so', data: 'x', mode: 0o644 }]));
+    const env = { ANDROID_NDK_HOME: '', ANDROID_NDK_LATEST_HOME: '', ANDROID_NDK_ROOT: '', ANDROID_NDK: '' };
+    const skipped = runTest(folderOf(d), data, { target: 't', dist: join(d, 'dist'), runnable: ['linux-x64'], env });
+    expect(skipped.output).toBe('t: skipped, linking a program against an android-arm64 build needs the Android NDK (set ANDROID_NDK_HOME)');
+    expect(skipped.exitCode).toBe(0);
+    expect(runTest(folderOf(d), data, { target: 't', dist: join(d, 'dist'), runnable: ['linux-x64'], env, mustRun: true }).exitCode).toBe(1);
   });
 
   it('runs test scripts on Windows with Git Bash (never WSL), cmd and PowerShell', () => {

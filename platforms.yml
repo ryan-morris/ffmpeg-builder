@@ -2,6 +2,10 @@
 #   image      images/<image>/Dockerfile, the toolchain it builds in (or `macos`: natively on a macOS host)
 #   setup      platforms/setup/<setup>.sh: compilers, cross files and packaging for the platform
 #   configure  FFmpeg configure flags every build for the platform passes
+#   runner     the GitHub Actions runner its builds are made on (default ubuntu-24.04)
+#   test-runner  the runner that runs its builds, when the one it builds on can't (default: runner). Most are run
+#              on their build runner: natively, in a container (musl, armhf), in the iOS simulator, as a Mac
+#              process (Catalyst), or on an Android emulator; Windows builds need Windows.
 # FFmpeg features a platform offers (vaapi, d3d11va, videotoolbox) are options in ffmpeg/<major>.yml that profiles
 # list; they don't belong here.
 platforms:
@@ -67,6 +71,7 @@ platforms:
     image: cross-windows
     setup: windows
     runner: ubuntu-24.04
+    test-runner: windows-2025
     configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-w32threads, --pkg-config=pkg-config, --target-os=mingw32, --enable-cross-compile, --arch=x86_64, --cross-prefix=x86_64-w64-mingw32-, --cc=x86_64-w64-mingw32-gcc-win32, --cxx=x86_64-w64-mingw32-g++-win32,
       "--extra-cflags=-static-libgcc -static-libstdc++ -O2 -pipe -DCHROMAPRINT_NODLL", "--extra-cxxflags=-static-libgcc -static-libstdc++ -O2 -pipe", "--extra-ldflags=-static-libgcc -static-libstdc++"]
     # mingw-w64's winpthreads, linked statically into the DLLs (setup/windows.sh); its MIT notice must travel with
@@ -76,6 +81,7 @@ platforms:
     image: cross-windows
     setup: windows
     runner: ubuntu-24.04
+    test-runner: windows-11-arm
     configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-w32threads, --pkg-config=pkg-config, --target-os=mingw32, --enable-cross-compile, --arch=aarch64, --cross-prefix=aarch64-w64-mingw32-, --cc=aarch64-w64-mingw32-clang, --cxx=aarch64-w64-mingw32-clang++,
       "--extra-cflags=-static-libgcc -O2 -pipe -DCHROMAPRINT_NODLL", "--extra-cxxflags=-static-libgcc -static-libstdc++ -O2 -pipe -include system_error", "--extra-ldflags=-static-libgcc -static-libstdc++"]
     # llvm-mingw's winpthreads, linked statically into the DLLs (setup/windows.sh), with its notice from llvm-mingw

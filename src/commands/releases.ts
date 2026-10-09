@@ -23,7 +23,8 @@ export interface ReleaseRow {
   due: boolean;
   reasons: string[];
   removals: string[];
-  targets: { name: string; platform: string; runner: string; cacheKey: string }[];
+  /** runner: the CI runner it builds on; testRunner: the one that runs it (the same, unless that one can't) */
+  targets: { name: string; platform: string; runner: string; testRunner: string; cacheKey: string }[];
 }
 
 /**
@@ -58,7 +59,7 @@ export async function releaseRows(folder: Folder, data: EngineData, options: { o
       due: reasons.length > 0,
       reasons,
       removals: removals(rel, follows?.manifest, folder, follows?.slices),
-      targets: rel.targets.map((t) => ({ name: t.target.name, platform: t.target.platform, runner: t.runner, cacheKey: cacheKey(t.target.platform, t.facts) })),
+      targets: rel.targets.map((t) => ({ name: t.target.name, platform: t.target.platform, runner: t.runner, testRunner: t.testRunner, cacheKey: cacheKey(t.target.platform, t.facts) })),
     });
   }
   return { rows, plans: releases, previous };

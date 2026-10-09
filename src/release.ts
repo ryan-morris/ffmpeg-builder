@@ -24,7 +24,7 @@ export interface TargetFacts {
   engine: string;
 }
 
-export interface PlannedTarget { target: Target; cell: CellPlan; facts: TargetFacts; runner: string }
+export interface PlannedTarget { target: Target; cell: CellPlan; facts: TargetFacts; runner: string; testRunner: string }
 export interface PlannedRelease { group: string; ffmpeg: string; base: string; targets: PlannedTarget[] }
 
 /**
@@ -105,11 +105,16 @@ export function toolchainDefinition(engineRoot: string, data: EngineData, platfo
   const entry = data.platforms.get(platform)!;
   const image = entry.image === 'macos' ? 'macos' : treeHash(join(engineRoot, 'images', entry.image));
   const setup = setupFiles(engineRoot, entry.setup).flatMap((f) => [relative(engineRoot, f).replaceAll('\\', '/'), readFileSync(f)]);
-  return sha(image, readFileSync(join(engineRoot, 'platforms', 'driver.sh')), JSON.stringify(entry), ...setup);
+  // where its builds are tested isn't part of the toolchain: changing it changes no build
+  const { testRunner: _tested, ...built } = entry;
+  return sha(image, readFileSync(join(engineRoot, 'platforms', 'driver.sh')), JSON.stringify(built), ...setup);
 }
 
 /** The runner a platform builds on in CI (platforms.yml `runner:`). */
 export const runnerOf = (data: EngineData, platform: string) => data.platforms.get(platform)?.runner ?? 'ubuntu-24.04';
+
+/** The runner that runs a platform's builds in CI (platforms.yml `test-runner:`): the one it builds on, unless that can't. */
+export const testRunnerOf = (data: EngineData, platform: string) => data.platforms.get(platform)?.testRunner ?? runnerOf(data, platform);
 
 /** The facts of one target's build, at the lock's versions. */
 export function targetFacts(folder: Folder, t: Target, data: EngineData, lock: FolderLock, engineRoot: string): { cell: CellPlan; facts: TargetFacts } | { error: string } {
@@ -140,7 +145,7 @@ export function planReleases(folder: Folder, data: EngineData, lock: FolderLock,
     const group = t.releaseGroup ?? '';
     const base = `${group ? `${group}-` : ''}${r.facts.ffmpeg}`;
     const rel = by.get(base) ?? { group, ffmpeg: r.facts.ffmpeg, base, targets: [] };
-    rel.targets.push({ target: t, cell: r.cell, facts: r.facts, runner: runnerOf(data, t.platform) });
+    rel.targets.push({ target: t, cell: r.cell, facts: r.facts, runner: runnerOf(data, t.platform), testRunner: testRunnerOf(data, t.platform) });
     by.set(base, rel);
   }
   for (const rel of by.values()) {

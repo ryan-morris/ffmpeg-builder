@@ -16,4 +16,8 @@ The first public version.
   line, where the source is, every library's licence files), kept sources and `<name>.sources.json`. It replaces the
   `legal/` folder devenvy/ffmpeg's archives had.
 - `releases`, `fetch`, and reusable `build`, `update` and `fetch-update` workflows (preview).
+- `test` runs every platform's builds where CI can: musl and armhf builds in containers, Windows builds on Windows
+  runners (`platforms.yml` `test-runner:`), and for Android, iOS and Mac Catalyst a program linked against the
+  libraries, run on an emulator, the simulator or the Mac. `build.yml`'s release needs them (`tests:` input).
+- Vulkan isn't offered on Apple platforms (no MoltenVK).
 - `migrate` for folders of the earlier matrix profiles.

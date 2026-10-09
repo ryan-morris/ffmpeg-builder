@@ -8,6 +8,7 @@ configure: [--enable-vulkan]
 needs: [vulkan-headers, spirv-headers]
 source: { git: https://github.com/KhronosGroup/Vulkan-Loader, ref: "vulkan-sdk-{version}" }
 versions: { git-tags: '^vulkan-sdk-(\d+\.\d+\.\d+\.\d+)$' }
-# Upstream's BUILD_VULKAN_LOADER: glibc and musl Linux, and macOS (paired with MoltenVK there).
-platforms: [linux-x64, linux-arm64, linux-musl-*, osx-*] # not linux-armhf: upstream uses the headers there
+# Upstream's BUILD_VULKAN_LOADER: glibc and musl Linux, and macOS paired with MoltenVK. Not macOS here: there is no
+# MoltenVK recipe, and this one ships only Linux's libvulkan.so*, so no Apple platform offers Vulkan yet.
+platforms: [linux-x64, linux-arm64, linux-musl-*] # not linux-armhf: upstream uses the headers there
 runtime: ['lib/libvulkan.so*']

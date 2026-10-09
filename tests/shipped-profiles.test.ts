@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -167,9 +167,31 @@ describe('Windows Vulkan', () => {
   it('options --json names each platform library with its licence and platforms', () => {
     const vulkan = optionFacts(data, '9').find((o) => o.name === 'vulkan')!;
     expect(vulkan.libraries).toEqual([
-      { name: 'vulkan-loader', spdx: 'Apache-2.0', platforms: expect.arrayContaining(['linux-x64', 'osx-arm64']) },
+      { name: 'vulkan-loader', spdx: 'Apache-2.0', platforms: ['linux-x64', 'linux-arm64', 'linux-musl-x64', 'linux-musl-arm64'] },
       { name: 'vulkan-headers', spdx: 'Apache-2.0 OR MIT', platforms: ['linux-armhf', 'win-x64', 'win-arm64', 'android-arm64', 'android-x64'] },
     ]);
+  });
+});
+
+// The Khronos loader's recipe ships a Linux libvulkan.so only (no MoltenVK), so Vulkan isn't offered on any Apple
+// platform; libplacebo builds against the headers, not the loader, so it stays (its FFmpeg filter needs Vulkan).
+describe("Vulkan isn't offered on Apple", () => {
+  const apple = /^(osx|ios|maccatalyst)-/;
+  it('options --json lists no Apple platform for vulkan or the loader', () => {
+    const vulkan = optionFacts(data, '9').find((o) => o.name === 'vulkan')!;
+    expect(vulkan.platforms.filter((p) => apple.test(p))).toEqual([]);
+    expect((vulkan.libraries ?? []).flatMap((l) => l.platforms).filter((p) => apple.test(p))).toEqual([]);
+    expect(data.recipes.get('vulkan-loader')!.platforms.some((p) => p.startsWith('osx-'))).toBe(false);
+    const placebo = optionFacts(data, '9').find((o) => o.name === 'placebo')!;
+    expect(placebo.platforms).toContain('osx-arm64');
+  });
+
+  it('check says a macOS target with vulkan has no library for it there', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ffmpeg-build-mac-vulkan-'));
+    writeFileSync(join(dir, 'ffmpeg-build.yml'), 'targets:\n  mac: { platform: osx-arm64, license: lgplv3, ffmpeg: 9, with: [vulkan] }\n');
+    const r = runCli(['check'], { cwd: dir });
+    expect(r.stdout).toContain('not on osx-arm64: ffmpeg-build has no library for vulkan there');
+    expect(r.exitCode).toBe(1);
   });
 });
 

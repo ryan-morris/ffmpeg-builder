@@ -45,8 +45,8 @@ maccatalyst-x64 binaries +libswresample x86_64 platform 6
 maccatalyst-x64 binaries -libswscale x86_64 arm64 platform 6
 maccatalyst-x64 binaries +libswscale x86_64 platform 6
 
-# Vulkan on macOS (the Khronos loader with MoltenVK) isn't in devenvy.yml's osx base, on osx-arm64 either: upstream
-# ships libvulkan and MoltenVK beside FFmpeg, with Vulkan and libplacebo enabled, and its programs and libavdevice/
+# Vulkan on macOS (the Khronos loader with MoltenVK) isn't offered on Apple, on osx-arm64 either: there is no MoltenVK
+# recipe and vulkan-loader's ships only Linux's libvulkan.so. Upstream ships libvulkan and MoltenVK beside FFmpeg, with Vulkan and libplacebo enabled, and its programs and libavdevice/
 # libavfilter load libvulkan.
 # with Rosetta, the registered components: the Vulkan encoders, filters (libplacebo's too) and hwaccel
 osx-x64 encoders -V..... prores_ks_vulkan
@@ -94,7 +94,7 @@ osx-x64 deps +libavdevice.63.1.102.dylib: archs=x86_64 minos=11.0 id=@rpath/liba
 osx-x64 deps +libavfilter.12.1.102.dylib: archs=x86_64 minos=11.0 id=@rpath/libavfilter.12.dylib loads=@rpath/libavcodec.63.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib
 osx-x64 deps -libvulkan.1.4.363.dylib: archs=x86_64 minos=11.0 id=@rpath/libvulkan.1.dylib loads=
 
-# Vulkan on macOS isn't in devenvy.yml's osx base (as on osx-x64): upstream ships libvulkan and MoltenVK, enables
+# Vulkan isn't offered on macOS (as on osx-x64): upstream ships libvulkan and MoltenVK, enables
 # Vulkan and libplacebo, and registers the Vulkan encoders, filters and hwaccel; its programs and libavdevice/
 # libavfilter load libvulkan.
 osx-arm64 files -MoltenVK_icd.json

@@ -73,7 +73,7 @@ export function loadEngineData(root: string): EngineData {
   const platforms = new Map<string, PlatformEntry>();
   for (const [p, entry] of Object.entries(platformFile?.platforms ?? {})) {
     if (!PLATFORMS.includes(p)) errors.push(`platforms.yml: ${p} is not a platform ffmpeg-build knows`);
-    platforms.set(p, { image: entry.image, setup: entry.setup, ...(entry.runner ? { runner: entry.runner } : {}), configure: entry.configure ?? [], ships: entry.ships ?? {} });
+    platforms.set(p, { image: entry.image, setup: entry.setup, ...(entry.runner ? { runner: entry.runner } : {}), ...(entry['test-runner'] ? { testRunner: entry['test-runner'] } : {}), configure: entry.configure ?? [], ships: entry.ships ?? {} });
     for (const [file, { license: expr }] of Object.entries(entry.ships ?? {})) {
       const verdict = allowedBy(expr, licenses);
       if ('unknown' in verdict) errors.push(`platforms.yml: ${p} ships ${file} under "${verdict.unknown.join(', ')}", which is not in licenses.yml; add it there with the profile licenses it may be linked into`);

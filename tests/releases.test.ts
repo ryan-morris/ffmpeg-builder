@@ -55,12 +55,13 @@ describe('ffmpeg-build releases', () => {
   it('groups targets by release group and FFmpeg version; a release never made is due, at build 0', async () => {
     const r = await runCliAsync(['releases', '--json'], { cwd: folder(), env });
     expect(r.exitCode).toBe(0);
-    const rows = JSON.parse(r.stdout) as { tag: string; due: boolean; reasons: string[]; targets: { name: string; runner: string }[] }[];
+    const rows = JSON.parse(r.stdout) as { tag: string; due: boolean; reasons: string[]; targets: { name: string; runner: string; testRunner: string }[] }[];
     expect(rows.map((x) => [x.tag, x.due, x.reasons, x.targets.map((t) => t.name)])).toEqual([
       ['9.1.0.0', true, ['never released'], ['linux-x64-lgplv3', 'linux-x64-gplv3']],
       ['dvr-9.1.0.0', true, ['never released'], ['dvr']],
     ]);
     expect(rows[0]!.targets[0]!.runner).toBe('ubuntu-24.04');
+    expect(rows[0]!.targets[0]!.testRunner).toBe('ubuntu-24.04'); // runs on the runner it builds on
     expect((rows[0]!.targets[0] as unknown as { cacheKey: string }).cacheKey).toMatch(/^ffmpeg-build-libs-linux-x64-[0-9a-f]{24}$/);
   });
 

@@ -16,6 +16,7 @@ jobs:
     uses: devenvy/ffmpeg-build/.github/workflows/build.yml@v1
     with:
       publish: never
+      # tests: build-runner   # no Windows test runners (a private repository pays twice the Linux rate for them)
   merge:
     needs: build
     uses: devenvy/ffmpeg-build/.github/workflows/automerge.yml@v1

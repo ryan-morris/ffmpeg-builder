@@ -126,10 +126,11 @@ program
 
 program
   .command('test')
-  .description("run a target's build: a smoke test, then its tests: scripts (where this machine can run it)")
+  .description("run a target's build: a smoke test, then its tests: scripts (where this machine can run it; a library build: link a program against it, and run that where it can)")
   .requiredOption('--target <name>', 'the target to test')
   .option('--dist <dir>', 'where it was built (build --out)', 'dist')
-  .action((opts: { target: string; dist: string }) => run(() => runTest(openFolder(), data(), { target: opts.target, dist: opts.dist })));
+  .option('--must-run', "fail, instead of skipping, a build this machine can't run (CI, on the runner meant to run it)")
+  .action((opts: { target: string; dist: string; mustRun?: boolean }) => run(() => runTest(openFolder(), data(), { target: opts.target, dist: opts.dist, mustRun: opts.mustRun === true })));
 
 program
   .command('releases')

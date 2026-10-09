@@ -9,8 +9,9 @@ the sources archive.
 
 - **`ffmpeg-build releases [--due] [--json]`** lists them: the next tag (one past the last published build), whether
   each release is **due** (anything a build is made of changed since its last release: versions, toolchain, patches,
-  the target itself, the engine) and why, and the CI runner of each target. It finds the last releases on GitHub,
-  from `GITHUB_REPOSITORY` or the folder's git remote; `--offline` treats every release as new.
+  the target itself, the engine) and why, and the CI runners of each target (`runner`, and `testRunner`, which runs
+  it). It finds the last releases on GitHub, from `GITHUB_REPOSITORY` or the folder's git remote; `--offline` treats
+  every release as new.
 - **Nothing disappears silently.** A target that would lose a component its last release had stops `update` and the
   release, until you say so with `allow-removal: [x264]` (on the target, or at the top for every target).
 - **Where releases go is checked before anything builds.** A public repository takes no nonfree target. A private
@@ -50,9 +51,13 @@ with `allow-removal:` on that slice's target).
 The engine ships reusable workflows (preview: each has been run end to end on the engine's own test repository, building, publishing and fetching real releases; their inputs may still change before 1.0):
 
 - **`build.yml`**: plan (`releases --json`), then each target of each due release on its runner (`platforms.yml`
-  `runner:`; Linux images through buildx and the Actions cache, the library cache per target), the iOS bundle on
-  macOS, and the release (`bundle`, then a GitHub release with every asset). `publish: changed-only | always | never`;
-  `never` is a pull-request check. One `all-builds` job to require. Its caller grants `contents: write` even with
+  `runner:`; Linux images through buildx and the Actions cache, the library cache per target), tested there, and
+  the builds that runner can't run tested on one that can (`test-runner:`: Windows); the iOS bundle on macOS, and the
+  release (`bundle`, then a GitHub release with every asset), which needs every test to pass.
+  `publish: changed-only | always | never`; `never` is a pull-request check. `tests: all | build-runner | none`
+  (default `all`): `build-runner` skips the Windows test runners, `none` every test (in a private repository Windows
+  minutes cost twice and macOS ten times Linux's; [what CI tests](building.md#what-ci-tests)). Any other value of
+  either stops the run before anything builds. One `all-builds` job to require. Its caller grants `contents: write` even with
   `never`: GitHub won't start a run whose called workflow has a job (the skipped release job) asking for more than
   the caller grants.
 - **`update.yml`**: `ffmpeg-build update`, then one pull request on `ffmpeg-build/update` with the update summary.
@@ -75,9 +80,15 @@ whose head is still the commit the passing run tested (`gh pr merge --squash --m
 `GITHUB_TOKEN` starts no workflows on the default branch; the scheduled release train picks it up. (Not from a `workflow_run`
 workflow: CI runs started with `GITHUB_TOKEN` trigger none.)
 
-Each takes an `engine` input: the ffmpeg-build to run. A version installs that npm release (the default is the
-version `ffmpeg.lock` records); a git or npm spec (one with `:` or `/`) is installed from it, and `source` builds the
-calling repository itself (the engine's own tests). Until the package is on npm, set
+`build.yml`, `update.yml` and `fetch-update.yml` take an `engine` input: the ffmpeg-build to run. A version (or npm
+dist-tag) installs that npm release; a git or npm spec (one with `:` or `/`) is installed from it, and `source`
+builds the calling repository itself (the engine's own tests). Left out, it is:
+
+- **`build.yml`, `update.yml`:** the version the folder's `ffmpeg.lock` records (`engine:`). `build.yml` stops if
+  the lock has none; `update.yml` then installs npm's `latest`.
+- **`fetch-update.yml`:** `latest`, npm's newest release (a product has no `ffmpeg.lock` to read one from).
+
+`automerge.yml` runs no engine. Until the package is on npm, set
 `engine: github:<owner>/<repo>#<ref>` (e.g. `github:ryan-morris/ffmpeg-builder#main`, or a tag or commit to pin it).
 npm builds `dist/` from a git spec when it packs it (the `prepare` script). The workflows run `npm pack "<spec>"` and
 install the package it makes, because `npm install --global <git spec>` runs `prepare` without the devDependencies it

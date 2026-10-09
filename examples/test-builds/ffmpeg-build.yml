@@ -1,11 +1,16 @@
 # The engine's own end-to-end test: one small target per kind of runner (Linux x64 and arm64, Windows and Android
 # cross-builds, macOS, and the four iOS / Mac Catalyst slices of one xcframework bundle), built by .github/workflows/test-builds.yml from this repository's source.
+# Some are there for where they are tested: linux-armhf in Debian armhf under qemu, linux-musl-arm64 in Alpine, and
+# win-arm64 on a Windows on Arm runner.
 bases:
   small: { with: [dav1d, opus] }
 targets:
   linux-x64-lgplv3:     { platform: linux-x64,     license: lgplv3, ffmpeg: 9, base: [small] }
   linux-arm64-lgplv3:   { platform: linux-arm64,   license: lgplv3, ffmpeg: 9, base: [small] }
   win-x64-lgplv3:       { platform: win-x64,       license: lgplv3, ffmpeg: 9, base: [small] }
+  linux-armhf-lgplv3:      { platform: linux-armhf,      license: lgplv3, ffmpeg: 9, base: [small] }
+  linux-musl-arm64-lgplv3: { platform: linux-musl-arm64, license: lgplv3, ffmpeg: 9, base: [small] }
+  win-arm64-lgplv3:        { platform: win-arm64,        license: lgplv3, ffmpeg: 9, base: [small] }
   android-arm64-lgplv3: { platform: android-arm64, license: lgplv3, ffmpeg: 9, base: [small] }
   osx-arm64-lgplv3:     { platform: osx-arm64,     license: lgplv3, ffmpeg: 9, base: [small] }
   ios-arm64-lgplv3:         { platform: ios-arm64,         license: lgplv3, ffmpeg: 9, base: [small] }

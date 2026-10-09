@@ -17,7 +17,8 @@ targets:
     ffmpeg-build lock                           # pick and lock the versions (asks upstream)
     ffmpeg-build build --target win-x64-gplv3   # ffmpeg-9.x.y-win-x64-gplv3.tar.gz and -dev.tar.gz
 
-**Status: early (0.x).** Every platform below builds and reproduces the published devenvy/ffmpeg builds, and releases
+**Status: early (0.x).** Every platform below builds and reproduces the published devenvy/ffmpeg builds (Apple's
+without Vulkan, below), and releases
 have been built, published and fetched end to end in CI. The `ffmpeg-build.yml` format and the workflow inputs may still
 change before 1.0.
 
@@ -34,7 +35,9 @@ change before 1.0.
 
 Linux, Windows and Android build in pinned Docker images on any host; Apple platforms build on a Mac with Xcode.
 Each one reproduces the builds devenvy/ffmpeg publishes (files, configure flags, components and dependencies, with
-every difference listed and explained).
+every difference listed and explained), with one gap: Apple builds have no Vulkan. devenvy/ffmpeg's ran it on
+MoltenVK, which ffmpeg-build doesn't build, so `vulkan` isn't offered on macOS, iOS or Mac Catalyst, and the Vulkan
+encoders, filters and hwaccel (and libplacebo's filter) are missing there.
 
 ## Install
 
@@ -64,7 +67,7 @@ Building also needs Docker (Linux, Windows, Android targets) or Xcode (Apple tar
     outdated     what is newer upstream (read-only)
     update       move ffmpeg.lock to the newest allowed versions (and write the PR text)
     build        build one target in its pinned toolchain
-    test         run a target's smoke test and its tests: on a build (where this machine can run it)
+    test         run a build where this machine can (a library build: link a program against it, run that where it can)
     releases     each release's next tag, and whether it changed since it was last published
     bundle       write a release's sources archive, manifest.yml, SHA256SUMS and notes (--apple: the iOS bundle)
     fetch        take a published build (for products that don't build FFmpeg)

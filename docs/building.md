@@ -8,21 +8,61 @@ import libraries, pkg-config files) to `--out` (default `dist`). It needs `ffmpe
 
 `ffmpeg-build test --target <name>` runs a build where this machine can run it: a smoke test (the programs start, the
 configure line matches the license, a one-second test pattern encodes), then each script the target lists in
-`tests:`, with `FFMPEG`, `FFPROBE` and `FFMPEG_DIR` set to the unpacked build. A non-zero exit fails it. A build for
-another platform (Android, iOS, Windows on a Linux machine) is skipped, and says so. A linux-musl-x64 build on a glibc
-linux-x64 machine with Docker runs in a plain Alpine container instead (the image the musl toolchain starts from,
-pinned by the same digest; Alpine has no bash, so a `.sh` test installs it in the container first).
+`tests:`, with `FFMPEG`, `FFPROBE` and `FFMPEG_DIR` set to the unpacked build. A non-zero exit fails it. A build this
+machine can't run is skipped, and says why; with `--must-run` (as CI uses it, on the runner meant to run the build)
+it fails instead.
+
+On a glibc Linux machine with Docker, some other Linux builds run in a container of the image their toolchain starts
+from, pinned by the same digest: a musl build of the machine's architecture in plain Alpine (which has no bash, so a
+`.sh` test installs it in the container first), and a linux-armhf build in Debian bookworm for `linux/arm/v7`. On an
+x64 machine (and on arm64 CPUs without 32-bit ARM, like GitHub's arm64 runners) the armhf container needs qemu for
+32-bit ARM, which the test says how to register when it is missing:
+
+    docker run --privileged --rm tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f --install arm
+
+Android, iOS and Mac Catalyst builds are libraries, with no programs to run. For them `test` links a small C program
+([`platforms/test/smoke.c`](../platforms/test/smoke.c)) against the build with the platform's own toolchain (the
+Android NDK from `ANDROID_NDK_HOME`, or Xcode's SDK), which proves a consumer can link every library, then runs it
+where the platform can run: on the Android device or emulator `adb` sees (the libraries are pushed beside it; needs
+`patchelf`), in the iOS simulator (it boots one, and deletes it afterwards, when none is booted), or as a process on
+this Mac (Mac Catalyst; x86_64 under Rosetta on Apple silicon). The program prints the version and configure line,
+checked as `ffmpeg -version` and `-buildconf` are, encodes and decodes an MPEG-4 frame, and looks up built-in
+decoders, muxers, demuxers, filters and bitstream filters. A target's `tests:` scripts don't run for these builds.
 
 On Windows, `.sh` tests run with Git Bash (`BASH`, else the one beside `git`, else the usual install folders; never
 WSL's `bash.exe`), `.cmd` and `.bat` with `cmd.exe`, and `.ps1` with `pwsh` (or Windows PowerShell). Elsewhere every
 test runs with `bash`.
 
-CI tests each target right after building it, on the runner it builds on (`platforms.yml` `runner:`), so only where
-that runner can run the build: linux-x64, linux-musl-x64 (in Alpine, on the linux-x64 runner), linux-arm64,
-osx-arm64 and osx-x64 (under Rosetta on the Apple-silicon runner, where it is installed). The rest are built but not
-run in CI, and the test step says it skipped them: linux-musl-arm64 (built on a glibc arm64 runner), linux-armhf,
-win-x64 and win-arm64 (cross-compiled on Linux), android-arm64 and android-x64, and the iOS and Mac Catalyst
-frameworks.
+### What CI tests
+
+`build.yml` tests each target right after building it, on the runner it builds on (`platforms.yml` `runner:`), and
+a build that runner can't run in a `test` job on the runner that can (`test-runner:`). The release, and `all-builds`,
+need both. Exactly:
+
+| Platform | Executed | Where |
+|---|---|---|
+| linux-x64, linux-arm64 | `ffmpeg`, `ffprobe` and `tests:` | its build runner (ubuntu-24.04, ubuntu-24.04-arm) |
+| linux-musl-x64, linux-musl-arm64 | the same, in plain Alpine | its build runner (ubuntu-24.04, ubuntu-24.04-arm) |
+| linux-armhf | the same, in Debian armhf under qemu | its build runner (ubuntu-24.04) |
+| osx-arm64, osx-x64 | the same (osx-x64 under Rosetta) | its build runner (macos-15) |
+| win-x64, win-arm64 | the same (`.exe`) | the test job: windows-2025, windows-11-arm |
+| android-x64, android-arm64 | the smoke program, linked with the NDK | an x86_64 Android 15 emulator (KVM) on its build runner; android-arm64 through the system image's arm64 translation |
+| ios-sim-arm64 | the smoke program | the iOS simulator on its build runner (macos-15) |
+| maccatalyst-arm64, maccatalyst-x64 | the smoke program | its build runner (macos-15; x64 under Rosetta) |
+
+**Link-checked only:** ios-arm64 (the smoke program links against its frameworks with the iPhoneOS SDK; it runs only
+on a device). The xcframework bundle a release makes from the four Apple builds is not tested again; its slices are
+the archives tested above.
+
+**Not tested:** the `-dev` archives of the platforms with programs (nothing links against their headers and import
+libraries in CI), hardware acceleration (VAAPI, NVENC, VideoToolbox, MediaCodec, Vulkan: runners have no such
+devices), and anything a target's `tests:` don't cover. The smoke program checks only what every build has, not each
+library a target adds; `tests:` are where a target says what it needs to work.
+
+The `tests:` input of `build.yml` limits this: `all` (the default) runs everything above; `build-runner` runs only
+what the build runners run (no Windows test runners: in a private repository GitHub bills Windows minutes at twice and
+macOS at ten times the Linux rate, and the Apple builds already run on macOS); `none` runs nothing. A test step on a
+build runner adds a few minutes (the Android emulator and the iOS simulator boot each time).
 
 ## Toolchains
 

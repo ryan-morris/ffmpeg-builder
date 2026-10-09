@@ -1,7 +1,9 @@
 # REUSABLE (preview). A folder of targets calls it to build and publish its releases:
-#   plan (releases --json) -> build each target on its runner -> iOS bundle (macOS) -> bundle + release per release
+#   plan (releases --json) -> build and test each target on its runner -> test on another runner the builds that one
+#   can't run (Windows) -> iOS bundle (macOS) -> bundle + release per release
 # `publish: changed-only` builds and publishes only the releases that changed since their last release; `always` all
-# of them; `never` builds without publishing (CI for pull requests).
+# of them; `never` builds without publishing (CI for pull requests). `tests: all` runs every build where CI can (see
+# docs/building.md); `build-runner` only on the runners they build on (no Windows runners); `none` runs none.
 name: build
 
 on:
@@ -19,6 +21,10 @@ on:
         description: ffmpeg-build to run, a version or a git/npm spec like github:owner/repo#ref (default the version ffmpeg.lock records; "source" builds this repository)
         type: string
         default: ''
+      tests:
+        description: all | build-runner | none (build-runner skips the Windows test runners, which cost more minutes in private repositories)
+        type: string
+        default: all
 
 # read-only everywhere; only the release job writes (it creates the GitHub release)
 permissions:
@@ -34,8 +40,24 @@ jobs:
       any: ${{ steps.plan.outputs.any }}
       apple: ${{ steps.plan.outputs.apple }}
       apple_releases: ${{ steps.plan.outputs.apple_releases }}
+      tests: ${{ steps.plan.outputs.tests }}
+      any_tests: ${{ steps.plan.outputs.any_tests }}
       engine: ${{ steps.engine.outputs.version }}
     steps:
+      # a misspelt value would otherwise build every release (publish) or publish what it shouldn't: stop first
+      - name: inputs
+        env:
+          PUBLISH: ${{ inputs.publish }}
+          TESTS: ${{ inputs.tests }}
+        run: |
+          case "${PUBLISH}" in
+            changed-only|always|never) ;;
+            *) echo "::error::build.yml input publish is \"${PUBLISH}\"; it takes changed-only, always or never"; exit 1 ;;
+          esac
+          case "${TESTS}" in
+            all|build-runner|none) ;;
+            *) echo "::error::build.yml input tests is \"${TESTS}\"; it takes all, build-runner or none"; exit 1 ;;
+          esac
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -77,7 +99,10 @@ jobs:
           ffmpeg-build releases --json ${due} > "${RUNNER_TEMP}/releases.json"
           {
             echo "releases=$(jq -c . "${RUNNER_TEMP}/releases.json")"
-            echo "matrix=$(jq -c '{include: [.[] as $r | $r.targets[] | {release: $r.tag, target: .name, platform: .platform, runner: .runner, cacheKey: .cacheKey}]}' "${RUNNER_TEMP}/releases.json")"
+            echo "matrix=$(jq -c '{include: [.[] as $r | $r.targets[] | {release: $r.tag, target: .name, platform: .platform, runner: .runner, testRunner: .testRunner, cacheKey: .cacheKey}]}' "${RUNNER_TEMP}/releases.json")"
+            # the builds their build runner can't run, for the test job on the runner that can
+            echo "tests=$(jq -c '{include: [.[] as $r | $r.targets[] | select(.testRunner != .runner) | {release: $r.tag, target: .name, platform: .platform, testRunner: .testRunner}]}' "${RUNNER_TEMP}/releases.json")"
+            echo "any_tests=$(jq '[.[].targets[] | select(.testRunner != .runner)] | length > 0' "${RUNNER_TEMP}/releases.json")"
             echo "any=$(jq 'length > 0' "${RUNNER_TEMP}/releases.json")"
             echo "apple=$(jq '[.[].targets[].platform | select(test("^(ios|maccatalyst)-"))] | length > 0' "${RUNNER_TEMP}/releases.json")"
             echo "apple_releases=$(jq -c '[.[] | select(any(.targets[]; .platform | test("^(ios|maccatalyst)-"))) | .tag]' "${RUNNER_TEMP}/releases.json")"
@@ -136,15 +161,93 @@ jobs:
       - name: build ${{ matrix.target }}
         working-directory: ${{ inputs.folder }}
         run: ffmpeg-build build --target "${{ matrix.target }}" --out "${{ runner.temp }}/dist"
+      # Testing (docs/building.md): every build its build runner can run must run there (--must-run); the test job
+      # runs the rest
+      - name: qemu for 32-bit ARM (linux-armhf runs in a Debian armhf container)
+        if: inputs.tests != 'none' && matrix.platform == 'linux-armhf'
+        run: docker run --privileged --rm tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f --install arm
+      - name: Rosetta (x86_64 builds run under it on Apple silicon)
+        if: inputs.tests != 'none' && runner.os == 'macOS' && endsWith(matrix.platform, '-x64')
+        run: sudo softwareupdate --install-rosetta --agree-to-license
       - name: test ${{ matrix.target }}
+        if: inputs.tests != 'none' && !startsWith(matrix.platform, 'android-')
         working-directory: ${{ inputs.folder }}
-        run: ffmpeg-build test --target "${{ matrix.target }}" --dist "${{ runner.temp }}/dist"
+        env:
+          HERE: ${{ matrix.testRunner == matrix.runner }}
+        run: |
+          must=
+          if [ "${HERE}" = true ]; then must=--must-run; fi
+          ffmpeg-build test --target "${{ matrix.target }}" --dist "${{ runner.temp }}/dist" ${must}
+      # Android: a program linked against the libraries with the runner's NDK runs on an x86_64 emulator (KVM):
+      # android-x64 natively, android-arm64 through the system image's arm64 translation
+      - name: KVM and patchelf for the Android emulator
+        if: inputs.tests != 'none' && startsWith(matrix.platform, 'android-')
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get -o Acquire::Retries=5 update -qq
+          sudo apt-get -o Acquire::Retries=5 install -y -q patchelf
+      - name: test ${{ matrix.target }} on an Android emulator
+        if: inputs.tests != 'none' && startsWith(matrix.platform, 'android-')
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          working-directory: ${{ inputs.folder }}
+          script: ffmpeg-build test --target "${{ matrix.target }}" --dist "${{ runner.temp }}/dist" --must-run
       - uses: actions/upload-artifact@v6
         with:
           name: dist-${{ matrix.release }}-${{ matrix.target }}
           path: ${{ runner.temp }}/dist
           retention-days: 5
           if-no-files-found: error
+
+  # The builds their build runner can't run (platforms.yml test-runner:, today Windows), on a runner that can
+  test:
+    needs: [plan, build]
+    if: needs.plan.outputs.any_tests == 'true' && inputs.tests == 'all'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.tests) }}
+    runs-on: ${{ matrix.testRunner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # the folder: ffmpeg-build.yml, ffmpeg.lock and the scripts its targets' tests: name
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: engine
+        env:
+          ENGINE: ${{ needs.plan.outputs.engine }}
+        run: |
+          # "source": this repository is the engine. A git or npm spec (with : or /, e.g. github:owner/repo#ref) is packed
+          # first: npm install --global <git spec> skips the devDependencies its prepare build needs. Else an npm version.
+          case "${ENGINE}" in
+            source) (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link) ;;
+            *[:/]*)
+              tgz="$(npm pack --silent --pack-destination "${RUNNER_TEMP}" "${ENGINE}" | tail -1)"
+              [ -n "${tgz}" ] || { echo "::error::npm pack ${ENGINE} made no package"; exit 1; }
+              npm install --global "${RUNNER_TEMP}/${tgz}" ;;
+            *) npm install --global "ffmpeg-build@${ENGINE}" ;;
+          esac
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist-${{ matrix.release }}-${{ matrix.target }}
+          path: ${{ runner.temp }}/dist
+      - name: test ${{ matrix.target }}
+        working-directory: ${{ inputs.folder }}
+        run: ffmpeg-build test --target "${{ matrix.target }}" --dist "${RUNNER_TEMP}/dist" --must-run
 
   ios:
     needs: [plan, build]
@@ -193,8 +296,8 @@ jobs:
           if-no-files-found: ignore
 
   release:
-    needs: [plan, build, ios]
-    if: always() && needs.plan.outputs.any == 'true' && inputs.publish != 'never' && needs.build.result == 'success' && (needs.ios.result == 'success' || needs.ios.result == 'skipped')
+    needs: [plan, build, test, ios]
+    if: always() && needs.plan.outputs.any == 'true' && inputs.publish != 'never' && needs.build.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') && (needs.ios.result == 'success' || needs.ios.result == 'skipped')
     strategy:
       max-parallel: 1
       matrix:
@@ -265,7 +368,7 @@ jobs:
           gh release edit "${TAG}" --draft=false --latest="${latest}"
 
   all-builds:
-    needs: [plan, build, ios, release]
+    needs: [plan, build, test, ios, release]
     if: always()
     runs-on: ubuntu-24.04
     steps:

@@ -1,8 +1,10 @@
 // `ffmpeg-build test --target <name>`: runs a target's build where this machine can run it. A smoke test first (the
 // programs start, their configure line is the plan's, a short encode works), then each script the target lists in
-// `tests:`, with FFMPEG, FFPROBE and FFMPEG_DIR set. A build this machine can't run is skipped and says why. A
-// linux-musl-x64 build on a glibc linux-x64 machine with Docker runs in a plain Alpine container (the image the
-// musl toolchain is built from, pinned by the same digest).
+// `tests:`, with FFMPEG, FFPROBE and FFMPEG_DIR set. A build this machine can't run is skipped and says why (with
+// --must-run, it fails). On a glibc Linux machine with Docker, a musl build of its architecture runs in a plain Alpine
+// container and a linux-armhf build in a Debian armhf one (the images their toolchains start from, pinned by the same
+// digests; armhf under qemu where the CPU can't run 32-bit ARM). A build of libraries only (Android, iOS, Mac
+// Catalyst) is tested by linking a small program against it and running that where it can (test-library.ts).
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,9 +13,10 @@ import { LICENSE_FLAGS } from '../build/plan.ts';
 import type { EngineData } from '../engine-data.ts';
 import { LOCK_FILE, readFolderLock } from '../lockfile.ts';
 import { packageRoot } from '../paths.ts';
-import { artifactName, FOLDER_FILE, type Folder } from '../targets.ts';
+import { artifactName, FOLDER_FILE, type Folder, type Target } from '../targets.ts';
 import { extractTarGz } from '../untar.ts';
 import { FolderError } from './folder.ts';
+import { cannotLink, LIBRARY_PLATFORM, testLibrary } from './test-library.ts';
 
 type Result = { output: string; exitCode: number };
 
@@ -24,31 +27,61 @@ export function isMusl(): boolean {
   return !report?.header?.glibcVersionRuntime;
 }
 
-/** This machine as a platform, and the platforms it can also run (Rosetta, Windows on Arm's x64 emulation). */
+/**
+ * This machine as a platform, and the platforms it can also run: a Mac runs Mac Catalyst builds as its own processes
+ * and arm64 iOS simulator builds in the simulator, Rosetta runs x86_64 ones on Apple silicon, Windows on Arm emulates
+ * x64. Containers (containerFor) and Android devices come on top.
+ */
 export function runnablePlatforms(platform = process.platform, arch = process.arch, musl = isMusl(), rosetta = hasRosetta()): string[] {
   if (platform === 'linux' && arch === 'x64') return [musl ? 'linux-musl-x64' : 'linux-x64'];
   if (platform === 'linux' && arch === 'arm64') return [musl ? 'linux-musl-arm64' : 'linux-arm64'];
   if (platform === 'linux' && arch === 'arm') return musl ? [] : ['linux-armhf']; // there is no musl armhf build
-  if (platform === 'darwin' && arch === 'arm64') return rosetta ? ['osx-arm64', 'osx-x64'] : ['osx-arm64'];
-  if (platform === 'darwin' && arch === 'x64') return ['osx-x64'];
+  if (platform === 'darwin' && arch === 'arm64') return ['osx-arm64', 'maccatalyst-arm64', 'ios-sim-arm64', ...(rosetta ? ['osx-x64', 'maccatalyst-x64'] : [])];
+  if (platform === 'darwin' && arch === 'x64') return ['osx-x64', 'maccatalyst-x64'];
   if (platform === 'win32' && arch === 'x64') return ['win-x64'];
   if (platform === 'win32' && arch === 'arm64') return ['win-arm64', 'win-x64'];
   return [];
 }
+
+/** The OS of a machine that runs these platforms. */
+const hostOf = (runnable: string[]): NodeJS.Platform | undefined =>
+  runnable.some((p) => p.startsWith('osx-')) ? 'darwin' : runnable.some((p) => p.startsWith('win-')) ? 'win32' : runnable.some((p) => p.startsWith('linux-')) ? 'linux' : undefined;
+
+export interface Container { image: string; dockerPlatform: string; bash: 'apk' | 'present' }
+
+/**
+ * The container a glibc Linux machine with Docker runs another Linux platform's build in: musl builds of its own
+ * architecture in Alpine, and linux-armhf in Debian armhf (under qemu on x64; GitHub's arm64 runners can't run 32-bit
+ * ARM natively either). `image` is the images/ folder whose FROM is the container's image.
+ */
+export function containerFor(platform: string, runnable: string[]): Container | undefined {
+  if (platform === 'linux-musl-x64' && runnable.includes('linux-x64')) return { image: 'linux-musl-x64', dockerPlatform: 'linux/amd64', bash: 'apk' };
+  if (platform === 'linux-musl-arm64' && runnable.includes('linux-arm64')) return { image: 'linux-musl-arm64', dockerPlatform: 'linux/arm64', bash: 'apk' };
+  if (platform === 'linux-armhf' && (runnable.includes('linux-x64') || runnable.includes('linux-arm64'))) return { image: 'cross-armhf', dockerPlatform: 'linux/arm/v7', bash: 'present' };
+  return undefined;
+}
+
+/** The qemu that runs arm64 builds on x64 hosts (docs/building.md); `--install arm` lets Docker start armhf containers. */
+export const BINFMT = 'tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f';
 
 function hasRosetta(): boolean {
   if (process.platform !== 'darwin') return false;
   return spawnSync('arch', ['-x86_64', '/usr/bin/true']).status === 0;
 }
 
-/** The Alpine image linux-musl-x64 builds from (images/linux-musl-x64/Dockerfile's FROM, digest and all). */
-export function muslImage(engineRoot = packageRoot): string {
-  const from = /^FROM\s+(\S+@sha256:[0-9a-f]{64})/m.exec(readFileSync(join(engineRoot, 'images', 'linux-musl-x64', 'Dockerfile'), 'utf8'))?.[1];
-  if (!from) throw new FolderError('images/linux-musl-x64/Dockerfile has no FROM pinned by digest');
+/** The image a toolchain image starts from (images/<name>/Dockerfile's FROM, digest and all). */
+export function baseImage(name: string, engineRoot = packageRoot): string {
+  const from = /^FROM\s+(?:--platform=\S+\s+)?(\S+@sha256:[0-9a-f]{64})/m.exec(readFileSync(join(engineRoot, 'images', name, 'Dockerfile'), 'utf8'))?.[1];
+  if (!from) throw new FolderError(`images/${name}/Dockerfile has no FROM pinned by digest`);
   return from;
 }
 
+/** The Alpine image linux-musl-x64 builds from. */
+export const muslImage = (engineRoot = packageRoot) => baseImage('linux-musl-x64', engineRoot);
+
 const dockerWorks = () => spawnSync('docker', ['version', '--format', '{{.Server.Version}}'], { stdio: 'ignore' }).status === 0;
+/** Whether Docker starts a container of this platform here (armhf needs a CPU with AArch32, or qemu registered). */
+const dockerRuns = (image: string, platform: string) => spawnSync('docker', ['run', '--rm', '--network', 'none', '--platform', platform, image, 'true'], { stdio: 'ignore' }).status === 0;
 
 /**
  * Git Bash on Windows (never WSL's bash.exe, which PATH often finds first): $BASH when it is a file, else the bash
@@ -92,10 +125,10 @@ function defaultPowerShell(): string | undefined {
   return ['pwsh', 'powershell'].find((p) => spawnSync(p, ['-NoProfile', '-Command', 'exit 0'], { stdio: 'ignore' }).status === 0);
 }
 
-/** `docker run` arguments that run `cmd` in the musl image with the build and the folder mounted at their own paths. */
-export function dockerArgs(image: string, mounts: string[], cwd: string, env: Record<string, string>, cmd: string, args: string[], network = false): string[] {
+/** `docker run` arguments that run `cmd` in a test container with the build and the folder mounted at their own paths. */
+export function dockerArgs(image: string, mounts: string[], cwd: string, env: Record<string, string>, cmd: string, args: string[], network = false, platform?: string): string[] {
   return [
-    'run', '--rm', ...(network ? [] : ['--network', 'none']),
+    'run', '--rm', ...(network ? [] : ['--network', 'none']), ...(platform ? ['--platform', platform] : []),
     ...mounts.flatMap((m) => ['-v', `${m}:${m}:ro`]),
     '-w', cwd,
     ...Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]),
@@ -125,18 +158,45 @@ export const missingLicenseFlags = (buildconf: string, license: keyof typeof LIC
   return LICENSE_FLAGS[license].filter((f) => !words.has(f));
 };
 
-export function runTest(folder: Folder, _data: EngineData, options: { target: string; dist: string; runnable?: string[]; docker?: boolean }): Result {
+export interface TestOptions {
+  target: string;
+  dist: string;
+  /** a build this machine can't run fails instead of being skipped: CI, on the runner meant to run it */
+  mustRun?: boolean;
+  // for tests: what this machine runs, whether Docker works and starts armhf containers, extra environment
+  runnable?: string[];
+  docker?: boolean;
+  armhf?: boolean;
+  env?: NodeJS.ProcessEnv;
+}
+
+export function runTest(folder: Folder, _data: EngineData, options: TestOptions): Result {
   const t = folder.targets.find((x) => x.name === options.target);
   if (!t) throw new FolderError(`no target ${options.target} in ${FOLDER_FILE} (targets: ${folder.targets.map((x) => x.name).join(', ')})`);
   const lock = readFolderLock(join(folder.dir, LOCK_FILE));
   const version = lock?.ffmpeg[t.ffmpeg];
   if (!version) throw new FolderError(`${LOCK_FILE} has no FFmpeg ${t.ffmpeg}; run ffmpeg-build lock (and build) first`);
   const runnable = options.runnable ?? runnablePlatforms();
-  // a musl x64 build runs in an Alpine container on a glibc x64 Linux machine that has Docker
-  const inDocker = !runnable.includes(t.platform) && t.platform === 'linux-musl-x64' && runnable.includes('linux-x64') && (options.docker ?? dockerWorks());
-  if (!runnable.includes(t.platform) && !inDocker) {
-    const docker = t.platform === 'linux-musl-x64' && runnable.includes('linux-x64') ? ' (with Docker it would run in an Alpine container)' : '';
-    return { output: `${t.name}: skipped, ${t.platform} builds don't run on this machine (it runs ${runnable.join(', ') || 'none of the build platforms'})${docker}`, exitCode: 0 };
+  const host = (options.runnable && hostOf(runnable)) || process.platform;
+  const env = { ...process.env, ...options.env };
+  const skip = (why: string): Result => options.mustRun
+    ? { output: `${t.name}: ✗ not run, ${why}, and --must-run says it must`, exitCode: 1 }
+    : { output: `${t.name}: skipped, ${why}`, exitCode: 0 };
+
+  const library = LIBRARY_PLATFORM.test(t.platform);
+  let container: Container | undefined;
+  if (library) {
+    const why = cannotLink(t.platform, host, env);
+    if (why) return skip(why);
+  } else if (!runnable.includes(t.platform)) {
+    const c = containerFor(t.platform, runnable);
+    const cant = `${t.platform} builds don't run on this machine (it runs ${runnable.join(', ') || 'none of the build platforms'})`;
+    if (!c) return skip(cant);
+    if (!(options.docker ?? dockerWorks())) return skip(`${cant} (with Docker it would run in ${c.bash === 'apk' ? 'an Alpine' : 'a Debian armhf'} container)`);
+    if (c.dockerPlatform === 'linux/arm/v7' && !(options.armhf ?? dockerRuns(baseImage(c.image), c.dockerPlatform))) {
+      return skip(`this machine's Docker can't start a linux/arm/v7 container for it; register qemu for 32-bit ARM: docker run --privileged --rm ${BINFMT} --install arm`);
+    }
+    container = c;
   }
   const archive = join(resolve(options.dist), `${artifactName(t, version)}.tar.gz`);
   if (!existsSync(archive)) throw new FolderError(`${t.name} isn't built in ${options.dist} (ffmpeg-build build --target ${t.name} --out ${options.dist})`);
@@ -144,23 +204,47 @@ export function runTest(folder: Folder, _data: EngineData, options: { target: st
   const dir = mkdtempSync(join(tmpdir(), 'ffmpeg-build-test-'));
   const lines: string[] = [];
   let failed = 0;
-  const step = (ok: boolean, what: string, detail?: string) => {
-    lines.push(`  ${ok ? '✓' : '✗'} ${what}`);
-    if (!ok) {
+  const step = (ok: boolean | 'info', what: string, detail?: string) => {
+    lines.push(`  ${ok === 'info' ? '-' : ok ? '✓' : '✗'} ${what}`);
+    if (ok === false) {
       failed++;
       if (detail) lines.push(...detail.trim().split('\n').slice(-15).map((l) => `      ${l}`));
     }
   };
   try {
     extractTarGz(readFileSync(archive), dir);
+    if (library) {
+      // the -dev archive's headers, when it was built beside it (an Apple build's frameworks carry them too)
+      const devArchive = join(resolve(options.dist), `${artifactName(t, version)}-dev.tar.gz`);
+      const dev = existsSync(devArchive) ? join(dir, '.dev') : undefined;
+      if (dev) extractTarGz(readFileSync(devArchive), dev);
+      const arch = runnable.includes('osx-arm64') || runnable.includes('linux-arm64') ? 'arm64' : 'x64';
+      const slash = (p: string) => p.replaceAll('\\', '/');
+      const steps = testLibrary({
+        platform: t.platform, license: t.license, version, dir: slash(dir), ...(dev ? { dev: slash(dev) } : {}), env,
+        mustRun: options.mustRun === true, host, arch, rosetta: arch === 'arm64' && runnable.includes('osx-x64'),
+      });
+      for (const s of steps) step(s.ok, s.what, s.detail);
+      for (const test of t.tests) step('info', `tests: ${test} not run: ${t.platform} builds have no programs to run it with`);
+    } else {
+      testPrograms(t, version);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return { output: [`${t.name} (${artifactName(t, version)}.tar.gz)`, ...lines, '', failed ? `${failed} failed` : 'all passed'].join('\n'), exitCode: failed ? 1 : 0 };
+
+  function testPrograms(t: Target, version: string) {
     const windows = t.platform.startsWith('win-');
     const ffmpeg = program(dir, 'ffmpeg', windows);
     const ffprobe = program(dir, 'ffprobe', windows);
     const testEnv = { FFMPEG: ffmpeg ?? '', FFPROBE: ffprobe ?? '', FFMPEG_DIR: dir, FFMPEG_TARGET: t.name, FFMPEG_PLATFORM: t.platform };
-    const image = inDocker ? muslImage() : '';
+    const image = container ? baseImage(container.image) : '';
+    const docker = (cwd: string, env: Record<string, string>, cmd: string, args: string[], network = false) =>
+      run('docker', dockerArgs(image, [dir, folder.dir], cwd, env, cmd, args, network, container!.dockerPlatform));
     const exec = (cmd: string, args: string[], env: Record<string, string> = {}, verbatim = false) =>
-      inDocker ? run('docker', dockerArgs(image, [dir, folder.dir], folder.dir, env, cmd, args)) : run(cmd, args, { ...process.env, ...env }, verbatim);
-    if (inDocker) lines.push(`  (in ${image.split('@')[0]}, a plain musl system)`);
+      container ? docker(folder.dir, env, cmd, args) : run(cmd, args, { ...process.env, ...env }, verbatim);
+    if (container) lines.push(`  (in ${image.split('@')[0]} ${container.dockerPlatform}, a plain ${container.bash === 'apk' ? 'musl' : 'Debian armhf'} system)`);
     if (!ffmpeg) {
       step(false, `no ffmpeg program in ${artifactName(t, version)}.tar.gz`);
     } else {
@@ -174,11 +258,11 @@ export function runTest(folder: Folder, _data: EngineData, options: { target: st
       // the target's own tests, from the folder
       for (const test of t.tests) {
         const script = join(folder.dir, test);
-        if (inDocker) {
+        if (container) {
           // Alpine has sh, not bash: add bash for a .sh script (the container's network is needed for that one step)
-          const r = /\.sh$/.test(test)
-            ? run('docker', dockerArgs(image, [dir, folder.dir], dirname(script), testEnv, 'sh', ['-c', 'apk add --no-cache -q bash >/dev/null && exec bash "$0"', script], true))
-            : exec(script, [], testEnv);
+          const r = !/\.sh$/.test(test) ? exec(script, [], testEnv)
+            : container.bash === 'apk' ? docker(dirname(script), testEnv, 'sh', ['-c', 'apk add --no-cache -q bash >/dev/null && exec bash "$0"', script], true)
+            : docker(dirname(script), testEnv, 'bash', [script]);
           step(r.code === 0, `tests: ${test}`, r.error?.message ?? r.out);
           continue;
         }
@@ -191,8 +275,5 @@ export function runTest(folder: Folder, _data: EngineData, options: { target: st
         step(r.code === 0, `tests: ${test}`, r.error?.message ?? r.out);
       }
     }
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
   }
-  return { output: [`${t.name} (${artifactName(t, version)}.tar.gz)`, ...lines, '', failed ? `${failed} failed` : 'all passed'].join('\n'), exitCode: failed ? 1 : 0 };
 }

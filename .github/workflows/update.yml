@@ -19,7 +19,7 @@ on:
         type: string
         default: ci.yml
       engine:
-        description: ffmpeg-build to run, a version or a git/npm spec like github:owner/repo#ref (default the version ffmpeg.lock records; "source" builds this repository)
+        description: ffmpeg-build to run, a version or a git/npm spec like github:owner/repo#ref (default the version ffmpeg.lock records, else latest; "source" builds this repository)
         type: string
         default: ''
     secrets:
@@ -52,7 +52,9 @@ jobs:
         env:
           WANTED: ${{ inputs.engine }}
         run: |
+          # the input, else the lock's engine, else npm's latest (a lock written by hand may name none)
           ENGINE="${WANTED:-$(sed -n 's/^engine: *//p' ffmpeg.lock | head -1)}"
+          ENGINE="${ENGINE:-latest}"
           # "source": this repository is the engine. A git or npm spec (with : or /, e.g. github:owner/repo#ref) is packed
           # first: npm install --global <git spec> skips the devDependencies its prepare build needs. Else an npm version.
           case "${ENGINE}" in
