@@ -1,0 +1,48 @@
+# Nightly FFmpeg support check (the engine's own): keeps ffmpeg/<major>.yml's releases equal to FFmpeg's release tags,
+# and reports options a new FFmpeg release adds, removes or reclassifies, and new majors. It opens or refreshes one
+# pull request: the release lists are data and can merge once CI passes; anything else in the report is for a person.
+name: ffmpeg-support
+on:
+  schedule:
+    - cron: '37 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: ffmpeg-build/ffmpeg-support
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: npm ci
+      - name: check FFmpeg's releases and configure
+        run: |
+          node scripts/ffmpeg-support.ts --write --report "${RUNNER_TEMP}/support.md"
+          cat "${RUNNER_TEMP}/support.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: open or refresh the pull request
+        run: |
+          if git diff --quiet -- ffmpeg/ && ! grep -qE '\*\*(new in|gone from|licence class|New FFmpeg major)' "${RUNNER_TEMP}/support.md"; then
+            echo "FFmpeg support is current" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "${BRANCH}"
+          git add -- ffmpeg/
+          git commit --quiet --allow-empty -m "ffmpeg: support check"
+          git push --force origin "${BRANCH}"
+          title="ffmpeg: FFmpeg support check"
+          if [ -n "$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')" ]; then
+            gh pr edit "${BRANCH}" --title "${title}" --body-file "${RUNNER_TEMP}/support.md"
+          else
+            gh pr create --head "${BRANCH}" --title "${title}" --body-file "${RUNNER_TEMP}/support.md"
+          fi
