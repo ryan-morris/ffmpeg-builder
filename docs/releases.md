@@ -19,9 +19,27 @@ the sources archive.
   checks this in CI's plan step, so nothing is built (or uploaded as a workflow artifact) that couldn't be published,
   and `bundle` checks it again.
 
+### iOS and Mac Catalyst: the xcframework bundle
+
+A licence's four framework builds (ios-arm64, ios-sim-arm64, maccatalyst-arm64 and maccatalyst-x64) ship as one
+archive, `ffmpeg-<version>-ios-<license>.tar.gz`, as devenvy/ffmpeg published them: one `<lib>.xcframework` per FFmpeg
+library, each with three slices (`ios-arm64`, `ios-arm64-simulator`, and `ios-arm64_x86_64-maccatalyst`, the two
+Catalyst builds fused with `lipo` and signed again ad hoc), and one `THIRD-PARTY-NOTICES.txt` at the root that holds
+each of the four builds' notices in full, after a header saying which build went into which slice.
+
+    ffmpeg-build bundle --apple --release 9.0.2.3 --dist dist   # on a Mac with Xcode, after building the four
+    ffmpeg-build bundle --release 9.0.2.3 --dist dist           # anywhere: the release, with the bundle in it
+
+`bundle --apple` refuses off macOS, when a licence lacks one of the four targets or its archive, and when a slice's
+binaries aren't that slice's architectures and platform. Plain `bundle` then publishes the bundle in place of the
+four builds' archives, as one `manifest.yml` entry named `ios-<license>` with platform `ios`; its runtime and dev
+assets are the same file (the xcframeworks carry the headers). The entry's components are the four builds' together,
+and its toolchain and definition change when any build's do. The four builds' sources are in the sources archive,
+each with its own section in `SOURCES.md`. Plain `bundle` refuses a release whose bundle isn't in `--dist`.
+
 ## CI (GitHub Actions)
 
-The engine ships reusable workflows (preview: they are being run end to end for the first time):
+The engine ships reusable workflows (preview: each has been run end to end on the engine's own test repository, building, publishing and fetching real releases; their inputs may still change before 1.0):
 
 - **`build.yml`**: plan (`releases --json`), then each target of each due release on its runner (`platforms.yml`
   `runner:`; Linux images through buildx and the Actions cache, the library cache per target), the iOS bundle on

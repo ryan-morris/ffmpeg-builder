@@ -56,11 +56,13 @@ export function writeEngine(files: Record<string, string>): string {
 export function copyDvrFolder(dir: string): void {
   cpSync(join(fixtureProfilesDir, '..', 'folder', 'ffmpeg-build.yml'), join(dir, 'ffmpeg-build.yml'));
   cpSync(join(fixtureProfilesDir, 'patches'), join(dir, 'patches'), { recursive: true });
+  cpSync(join(fixtureProfilesDir, 'tests'), join(dir, 'tests'), { recursive: true });
 }
 
 export function copyDvr(dir: string): void {
   cpSync(join(fixtureProfilesDir, 'dvr.yml'), join(dir, 'dvr.yml'));
   cpSync(join(fixtureProfilesDir, 'patches'), join(dir, 'patches'), { recursive: true });
+  cpSync(join(fixtureProfilesDir, 'tests'), join(dir, 'tests'), { recursive: true });
 }
 
 /** Runs the CLI from source, as a user would; stdout and stderr together on failure. */

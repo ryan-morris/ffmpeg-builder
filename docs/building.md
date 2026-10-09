@@ -4,6 +4,14 @@
 `ffmpeg-<version>-<target>.tar.gz` (the runtime: programs and shared libraries) and `-dev.tar.gz` (headers,
 import libraries, pkg-config files) to `--out` (default `dist`). It needs `ffmpeg.lock` (`ffmpeg-build lock`).
 
+## Testing a build
+
+`ffmpeg-build test --target <name>` runs a build where this machine can run it: a smoke test (the programs start, the
+configure line matches the license, a one-second test pattern encodes), then each script the target lists in
+`tests:`, with `FFMPEG`, `FFPROBE` and `FFMPEG_DIR` set to the unpacked build. A non-zero exit fails it. A build for
+another platform (Android, iOS, Windows on a Linux machine) is skipped, and says so; CI tests each target on its own
+runner right after building it.
+
 ## Toolchains
 
 | Platforms | Where it builds | Notes |
@@ -14,7 +22,7 @@ import libraries, pkg-config files) to `--out` (default `dist`). It needs `ffmpe
 | win-x64, win-arm64 | Ubuntu with mingw-w64 / llvm-mingw | cross-compiled; C and C++ runtimes static; an MSVC import `.lib` per DLL |
 | android-arm64, android-x64 | Ubuntu with the Android NDK | 16 KB page alignment checked; ships the NDK's `libc++_shared.so` |
 | osx-arm64, osx-x64 | natively on a Mac (Xcode) | flat, relocatable dylibs (macOS 11.0+); osx-x64 cross-compiles on Apple silicon |
-| ios-arm64, ios-sim-arm64, maccatalyst-arm64, maccatalyst-x64 | natively on a Mac (Xcode) | one `.framework` per FFmpeg library |
+| ios-arm64, ios-sim-arm64, maccatalyst-arm64, maccatalyst-x64 | natively on a Mac (Xcode) | one `.framework` per FFmpeg library; a release ships the four as xcframeworks ([iOS bundle](releases.md#ios-and-mac-catalyst-the-xcframework-bundle)) |
 
 [`platforms.yml`](../platforms.yml) says which platforms build, in which image, and on which CI runner; what differs
 per platform is in `platforms/setup/<name>.sh`, used by the one build driver (`platforms/driver.sh`). Images are

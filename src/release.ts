@@ -25,6 +25,23 @@ export interface TargetFacts {
 export interface PlannedTarget { target: Target; cell: CellPlan; facts: TargetFacts; runner: string }
 export interface PlannedRelease { group: string; ffmpeg: string; base: string; targets: PlannedTarget[] }
 
+/**
+ * The iOS / Mac Catalyst framework builds of one licence ship as one xcframework bundle (bundle --apple): these four
+ * slices, published as one entry named ios-<license> with platform ios.
+ */
+export const APPLE_SLICES = ['ios-arm64', 'ios-sim-arm64', 'maccatalyst-arm64', 'maccatalyst-x64'] as const;
+export const isFrameworkPlatform = (platform: string) => /^(ios|maccatalyst)-/.test(platform);
+
+/** What a release publishes: a target as it is, or a licence's framework slices as one ios-<license> entry. */
+export interface PublishedTarget {
+  name: string;
+  platform: string;
+  license: Target['license'];
+  facts: TargetFacts;
+  slices: PlannedTarget[]; // the builds behind it: one, or a licence's framework slices
+  allowRemoval: string[];
+}
+
 const sha = (...parts: (string | Buffer)[]) => {
   const h = createHash('sha256');
   for (const p of parts) h.update(p).update('\0');
@@ -99,21 +116,57 @@ export function planReleases(folder: Folder, data: EngineData, lock: FolderLock,
   return { releases: [...by.values()].sort((a, b) => a.base.localeCompare(b.base, undefined, { numeric: true })), errors };
 }
 
+/**
+ * The release's published targets, in the order they first appear. A licence's framework slices become one entry:
+ * components and patches are the slices' union (one lock, so one version each), toolchain and definition a hash of the
+ * slices' own, so a change to any slice is a change to the entry.
+ */
+export function publishedTargets(rel: PlannedRelease): PublishedTarget[] {
+  const out: (PublishedTarget | string)[] = [];
+  const frameworks = new Map<string, PlannedTarget[]>();
+  for (const p of rel.targets) {
+    if (!isFrameworkPlatform(p.target.platform)) {
+      out.push({ name: p.target.name, platform: p.target.platform, license: p.target.license, facts: p.facts, slices: [p], allowRemoval: p.target.allowRemoval });
+      continue;
+    }
+    if (!frameworks.has(p.target.license)) out.push(p.target.license);
+    frameworks.set(p.target.license, [...(frameworks.get(p.target.license) ?? []), p]);
+  }
+  return out.map((o): PublishedTarget => {
+    if (typeof o !== 'string') return o;
+    const slices = [...frameworks.get(o)!].sort((a, b) => a.target.platform.localeCompare(b.target.platform));
+    const components = Object.assign({}, ...slices.map((s) => s.facts.components)) as Record<string, string>;
+    const patches = new Map(slices.flatMap((s) => s.facts.patches).map((x) => [x.name, x]));
+    return {
+      name: `ios-${o}`, platform: 'ios', license: slices[0]!.target.license, slices,
+      facts: {
+        ffmpeg: slices[0]!.facts.ffmpeg, engine: slices[0]!.facts.engine,
+        components: Object.fromEntries(Object.keys(components).sort().map((k) => [k, components[k]!])),
+        patches: [...patches.values()].sort((a, b) => a.name.localeCompare(b.name)),
+        toolchain: sha(...slices.map((s) => `${s.target.platform} ${s.facts.toolchain}`)),
+        definition: sha(...slices.map((s) => `${s.target.platform} ${s.facts.definition}`)),
+      },
+      allowRemoval: [...new Set(slices.flatMap((s) => s.target.allowRemoval))],
+    };
+  });
+}
+
 /** Why a release differs from its last published manifest; empty when it doesn't. */
 export function changesSince(rel: PlannedRelease, previous: Manifest | undefined): string[] {
   if (!previous) return ['never released'];
   const why: string[] = [];
   const was = new Map(previous.targets.map((t) => [t.name, t]));
-  for (const { target, facts } of rel.targets) {
-    const p = was.get(target.name);
+  const published = publishedTargets(rel);
+  for (const { name, facts } of published) {
+    const p = was.get(name);
     if (!p) {
-      why.push(`${target.name}: new`);
+      why.push(`${name}: new`);
       continue;
     }
     const diff = factDiff(facts, p, previous);
-    if (diff.length) why.push(`${target.name}: ${diff.join(', ')}`);
+    if (diff.length) why.push(`${name}: ${diff.join(', ')}`);
   }
-  for (const name of was.keys()) if (!rel.targets.some((t) => t.target.name === name)) why.push(`${name}: removed`);
+  for (const name of was.keys()) if (!published.some((t) => t.name === name)) why.push(`${name}: removed`);
   return why;
 }
 
@@ -138,13 +191,13 @@ function factDiff(now: TargetFacts, was: ManifestTarget, m: Manifest): string[] 
 export function removals(rel: PlannedRelease, previous: Manifest | undefined, folder: Folder): string[] {
   if (!previous) return [];
   const errors: string[] = [];
-  for (const { target, facts } of rel.targets) {
-    const was = previous.targets.find((t) => t.name === target.name);
+  for (const { name, facts, allowRemoval } of publishedTargets(rel)) {
+    const was = previous.targets.find((t) => t.name === name);
     if (!was) continue;
-    const allowed = new Set([...folder.allowRemoval, ...target.allowRemoval]);
+    const allowed = new Set([...folder.allowRemoval, ...allowRemoval]);
     for (const c of Object.keys(was.components)) {
       if (!(c in facts.components) && !allowed.has(c)) {
-        errors.push(`${target.name}: ${c} was in ${previous.release} and is gone now; if that is intended, add allow-removal: [${c}] to the target`);
+        errors.push(`${name}: ${c} was in ${previous.release} and is gone now; if that is intended, add allow-removal: [${c}] to the target`);
       }
     }
   }

@@ -28,6 +28,19 @@ fails when it is stale).
 | `scripts/compare-published*.sh` | compare a build with a published devenvy/ffmpeg archive |
 | `docs/` | the user documentation (targets, building, releases) |
 
+## What CI checks
+
+- **Every push and pull request** (`ci.yml`): types, the test suite, shellcheck over every recipe and platform script,
+  and actionlint over the workflows.
+- **A change to a recipe** (`recipes.yml`): that library, and what it builds against (not FFmpeg), is built on every
+  target in `examples/canary` that uses it, at the canary lock's versions (`ffmpeg-build build --target T --only R`).
+  The canary's targets between them build every recipe.
+- **A change to a toolchain** (platform scripts, images): the small targets in `examples/test-builds` build in full,
+  on every kind of runner.
+- **Every week** (`canary.yml`): the canary lock moves to the newest upstream versions, in the run only, and every
+  canary target builds in full. A failure there is a new upstream release that broke a recipe, found before any
+  consumer's update PR meets it.
+
 ## Changes that need more than tests
 
 - **A recipe or platform change** should be built for real (`ffmpeg-build build --target ...`) and, where a published

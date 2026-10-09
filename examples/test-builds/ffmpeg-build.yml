@@ -1,5 +1,5 @@
 # The engine's own end-to-end test: one small target per kind of runner (Linux x64 and arm64, Windows and Android
-# cross-builds, macOS), built by .github/workflows/test-builds.yml from this repository's source.
+# cross-builds, macOS, and the four iOS / Mac Catalyst slices of one xcframework bundle), built by .github/workflows/test-builds.yml from this repository's source.
 bases:
   small: { with: [dav1d, opus] }
 targets:
@@ -8,3 +8,7 @@ targets:
   win-x64-lgplv3:       { platform: win-x64,       license: lgplv3, ffmpeg: 9, base: [small] }
   android-arm64-lgplv3: { platform: android-arm64, license: lgplv3, ffmpeg: 9, base: [small] }
   osx-arm64-lgplv3:     { platform: osx-arm64,     license: lgplv3, ffmpeg: 9, base: [small] }
+  ios-arm64-lgplv3:         { platform: ios-arm64,         license: lgplv3, ffmpeg: 9, base: [small] }
+  ios-sim-arm64-lgplv3:     { platform: ios-sim-arm64,     license: lgplv3, ffmpeg: 9, base: [small] }
+  maccatalyst-arm64-lgplv3: { platform: maccatalyst-arm64, license: lgplv3, ffmpeg: 9, base: [small] }
+  maccatalyst-x64-lgplv3:   { platform: maccatalyst-x64,   license: lgplv3, ffmpeg: 9, base: [small] }

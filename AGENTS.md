@@ -53,6 +53,8 @@ targets:
    version), each with its next tag, whether it is due and why, and each target's CI runner. A component a target
    had in its last release and would now lose stops `update` and the release; `allow-removal: [<name>]` allows it.
 8. `ffmpeg-build build --target <name>`: build it (Docker for Linux, Windows and Android; Xcode on a Mac for Apple).
+9. `ffmpeg-build test --target <name>` runs a build (smoke test, then the target's `tests:` scripts) where this
+   machine can run it.
 
 A product that uses FFmpeg without building it pins a release instead: `ffmpeg.version` holds `owner/repo@tag`, and
 `ffmpeg-build fetch ffmpeg.version --target <name> [--dev] --out <dir>` downloads, checks and unpacks it.

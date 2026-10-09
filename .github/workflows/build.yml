@@ -119,6 +119,9 @@ jobs:
       - name: build ${{ matrix.target }}
         working-directory: ${{ inputs.folder }}
         run: ffmpeg-build build --target "${{ matrix.target }}" --out "${{ runner.temp }}/dist"
+      - name: test ${{ matrix.target }}
+        working-directory: ${{ inputs.folder }}
+        run: ffmpeg-build test --target "${{ matrix.target }}" --dist "${{ runner.temp }}/dist"
       - uses: actions/upload-artifact@v6
         with:
           name: dist-${{ matrix.release }}-${{ matrix.target }}

@@ -8,12 +8,14 @@ import { runFolderLockOrUpdate, runFolderOutdated } from './commands/folder-vers
 import { FolderError, openFolder, runFolderCheck, runFolderEdit, runFolderInit, runFolderMissing, runFolderPlan, runShow, runShowHas, runTargets } from './commands/folder.ts';
 import { runMigrate } from './commands/migrate.ts';
 import { runReleases } from './commands/releases.ts';
+import { runTest } from './commands/test.ts';
 import { runOptions } from './commands/options.ts';
 import { UpstreamFailure, WriteError } from './commands/versions.ts';
 import { EngineDataError, loadEngineData } from './engine-data.ts';
 import { fetchRelease, FetchError, updatePin } from './fetch.ts';
 import { selectionFrom } from './folder-init.ts';
 import { bundle, BundleError } from './bundle.ts';
+import { bundleApple } from './bundle-apple.ts';
 import { LOCK_FILE, LockError, readFolderLock } from './lockfile.ts';
 import { ManifestError, parseManifest } from './manifest.ts';
 import { EditError } from './profile-edit.ts';
@@ -123,6 +125,13 @@ program
   .action((opts: { json?: boolean }) => run(() => runFolderOutdated(openFolder(), data(), { json: opts.json === true })));
 
 program
+  .command('test')
+  .description("run a target's build: a smoke test, then its tests: scripts (where this machine can run it)")
+  .requiredOption('--target <name>', 'the target to test')
+  .option('--dist <dir>', 'where it was built (build --out)', 'dist')
+  .action((opts: { target: string; dist: string }) => run(() => runTest(openFolder(), data(), { target: opts.target, dist: opts.dist })));
+
+program
   .command('releases')
   .description('the releases: next tag, whether each is due (changed since its last release) and why, targets and runners')
   .option('--due', 'only the releases that are due')
@@ -138,11 +147,16 @@ program
   .requiredOption('--release <tag>', 'the release, e.g. 9.0.2.3 (`ffmpeg-build releases` says which is next)')
   .option('--dist <dir>', 'where the targets were built (build --out)', 'dist')
   .option('--previous <manifest>', "the last release's manifest.yml (default: looked up on GitHub)")
-  .action((opts: { release: string; dist: string; previous?: string }) =>
+  .option('--apple', "on a Mac: make each licence's iOS / Mac Catalyst xcframework bundle (ffmpeg-<v>-ios-<license>.tar.gz) from its four framework builds")
+  .action((opts: { release: string; dist: string; previous?: string; apple?: boolean }) =>
     run(async () => {
       const folder = openFolder();
       const lock = readFolderLock(join(folder.dir, LOCK_FILE));
       if (!lock) throw new UsageError(`no ${LOCK_FILE} here; run ffmpeg-build lock first`);
+      if (opts.apple) {
+        const r = await bundleApple(folder, data(), lock, { tag: opts.release, dist: opts.dist, engineRoot: packageRoot });
+        return { output: `${opts.release}: ${r.assets.join(', ')}`, exitCode: 0 };
+      }
       const previous = opts.previous ? parseManifest(readFileSync(opts.previous, 'utf8'), opts.previous) : undefined;
       const r = await bundle(folder, data(), lock, { tag: opts.release, dist: opts.dist, engineRoot: packageRoot, ...(previous ? { previous } : {}) });
       return { output: [...r.notes, `${r.tag}: ${r.assets.join(', ')}${r.latest ? ' (latest)' : ''}`].join('\n'), exitCode: 0 };

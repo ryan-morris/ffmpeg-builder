@@ -33,7 +33,8 @@ for xc in "${tmp}/pubx"/*.xcframework; do
 done
 
 describe() { # <framework folder root> <out prefix> [architecture to read a fat binary's contents from]
-  (cd "$1" && find . -type f ! -path '*/_CodeSignature/*' | sed 's|^\./||' | LC_ALL=C sort) >"$2.files"
+  # the frameworks' files only: what sits beside them is the root section
+  (cd "$1" && find . -type f -path './*.framework/*' ! -path '*/_CodeSignature/*' | sed 's|^\./||' | LC_ALL=C sort) >"$2.files"
   : >"$2.flags"
   : >"$2.binaries"
   : >"$2.symbols"

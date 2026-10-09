@@ -1,7 +1,8 @@
 // `ffmpeg-build bundle`: after every target of a release has built into --dist, writes the rest of the release beside
 // the archives: the sources archive, manifest.yml, SHA256SUMS, release-notes.md, and bundle.json (what to upload).
 // It never uploads; the workflow does. It refuses anything that mustn't ship: a missing build, a component that
-// disappeared since the last release, a nonfree build headed for a public repository.
+// disappeared since the last release, a nonfree build headed for a public repository. A licence's iOS / Mac Catalyst
+// framework builds ship as its xcframework bundle (bundle --apple, src/bundle-apple.ts), one ios-<license> entry.
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
@@ -10,7 +11,7 @@ import { ffmpegAtLeast, FetchError, listReleases, parseTag, repoIsPrivate } from
 import type { FolderLock } from './lockfile.ts';
 import { formatManifest, MANIFEST_FILE, parseManifest, type Manifest, type ManifestTarget } from './manifest.ts';
 import { packageVersion } from './paths.ts';
-import { planReleases, removals, type PlannedRelease, type PlannedTarget } from './release.ts';
+import { planReleases, publishedTargets, removals, type PlannedRelease, type PlannedTarget } from './release.ts';
 import { previousReleases, publishingRepo } from './release-remote.ts';
 import { writeTarGz, type TarEntry } from './tar-write.ts';
 import { artifactName, type Folder } from './targets.ts';
@@ -22,7 +23,9 @@ interface SourceRecord { name: string; version: string; origin: string; file: st
 interface SourcesJson { artifact: string; target: string; ffmpeg: SourceRecord; libraries: SourceRecord[]; patches: { name: string; sha256: string }[] }
 
 const sha256 = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
-const isFramework = (platform: string) => /^(ios|maccatalyst)-/.test(platform);
+
+/** A licence's xcframework bundle: ffmpeg-<version>-ios-<license>.tar.gz, written by bundle --apple. */
+export const appleBundleName = (ffmpeg: string, license: string) => `ffmpeg-${ffmpeg}-ios-${license}.tar.gz`;
 
 /** Every file under `dir`, relative paths, sorted. */
 function filesUnder(dir: string, base = dir): string[] {
@@ -43,7 +46,7 @@ export interface BundleOptions {
 export interface BundleResult { tag: string; assets: string[]; latest: boolean; notes: string[] }
 
 /** Finds the release `tag` names among the folder's releases. */
-function releaseOf(folder: Folder, data: EngineData, lock: FolderLock, engineRoot: string, tag: string): { rel: PlannedRelease; build: number } {
+export function releaseOf(folder: Folder, data: EngineData, lock: FolderLock, engineRoot: string, tag: string): { rel: PlannedRelease; build: number } {
   const t = parseTag(tag);
   if (!t) throw new BundleError(`${tag} isn't a release tag: <ffmpeg>.<build> or <group>-<ffmpeg>.<build>`);
   const { releases, errors } = planReleases(folder, data, lock, engineRoot);
@@ -55,7 +58,7 @@ function releaseOf(folder: Folder, data: EngineData, lock: FolderLock, engineRoo
 }
 
 /** The archives and source record of one target in --dist, checked against each other. */
-function builtTarget(dist: string, p: PlannedTarget): { runtime: string; dev: string; sources: SourcesJson } {
+export function builtTarget(dist: string, p: PlannedTarget): { runtime: string; dev: string; sources: SourcesJson } {
   const name = artifactName(p.target, p.facts.ffmpeg);
   const files = { runtime: `${name}.tar.gz`, dev: `${name}-dev.tar.gz`, json: `${name}.sources.json` };
   const missing = Object.values(files).filter((f) => !existsSync(join(dist, f)));
@@ -157,7 +160,10 @@ function releaseNotes(m: Manifest, rel: PlannedRelease, repo: string | undefined
   if (m.targets.some((t) => t.redistributable === 'false')) out.push('> **Internal use only:** it holds nonfree builds, which may not be redistributed.', '');
   out.push(`Built by ffmpeg-build ${m.engine}. \`manifest.yml\` lists every asset with its sha256 (\`SHA256SUMS\` too); \`${m.sources.name}\` holds the complete corresponding source of every build.`, '');
   out.push('| Target | License | Download | |', '|---|---|---|---|');
-  for (const t of m.targets) out.push(`| ${t.name} | ${t.license} | \`${t.assets.runtime.name}\` | dev: \`${t.assets.dev.name}\` |`);
+  for (const t of m.targets) {
+    const dev = t.assets.dev.name === t.assets.runtime.name ? 'headers included (xcframeworks)' : `dev: \`${t.assets.dev.name}\``;
+    out.push(`| ${t.name} | ${t.license} | \`${t.assets.runtime.name}\` | ${dev} |`);
+  }
   const pins = rel.targets.flatMap((p) => Object.entries(p.cell.pins).map(([lib, v]) => `${lib} ${v} (${p.target.name})`));
   if (pins.length) out.push('', `**Pinned:** ${[...new Set(pins)].join(', ')}.`);
   const left = m.targets.flatMap((t) => t['not-included'].map((n) => `${t.name}: ${n}`));
@@ -201,8 +207,6 @@ export async function publishingProblems(folder: Folder, targets: { name: string
  */
 export async function bundle(folder: Folder, data: EngineData, lock: FolderLock, o: BundleOptions): Promise<BundleResult> {
   const { rel, build } = releaseOf(folder, data, lock, o.engineRoot, o.tag);
-  const frameworks = rel.targets.filter((p) => isFramework(p.target.platform)).map((p) => p.target.name);
-  if (frameworks.length) throw new BundleError(`${o.tag} has iOS / Mac Catalyst targets (${frameworks.join(', ')}); their xcframework bundle (bundle --apple, on a Mac) isn't available yet`);
   const repo = o.repo ?? publishingRepo(folder.dir);
 
   const refused = await publishingProblems(folder, rel.targets.map((p) => ({ name: p.target.name, license: p.target.license })), repo, { strict: true });
@@ -221,20 +225,36 @@ export async function bundle(folder: Folder, data: EngineData, lock: FolderLock,
   const gone = removals(rel, previous, folder);
   if (gone.length) throw new BundleError(gone.join('\n'));
 
+  // every build is checked, the framework slices too: their sources go into the sources archive
   const built = new Map<string, SourcesJson>();
-  const targets: ManifestTarget[] = [];
+  const archives = new Map<string, { runtime: string; dev: string }>();
   for (const p of rel.targets) {
     const b = builtTarget(o.dist, p);
     built.set(p.target.name, b.sources);
+    archives.set(p.target.name, b);
+  }
+  const targets: ManifestTarget[] = [];
+  for (const t of publishedTargets(rel)) {
+    let runtime: string;
+    let dev: string;
+    if (t.platform === 'ios') {
+      // the xcframeworks carry each library's headers, so one file serves as both runtime and dev
+      runtime = dev = appleBundleName(rel.ffmpeg, t.license);
+      if (!existsSync(join(o.dist, runtime))) {
+        throw new BundleError(`${runtime} (the ${t.license} xcframework bundle) isn't in ${o.dist}: make it on a Mac with ffmpeg-build bundle --apple --release ${o.tag} --dist ${o.dist}`);
+      }
+    } else {
+      ({ runtime, dev } = archives.get(t.name)!);
+    }
     targets.push({
-      name: p.target.name, platform: p.target.platform, license: p.target.license,
-      redistributable: p.target.license === 'nonfree' ? 'false' : 'true',
-      assets: { runtime: { name: b.runtime, sha256: sha256(join(o.dist, b.runtime)) }, dev: { name: b.dev, sha256: sha256(join(o.dist, b.dev)) } },
-      toolchain: p.facts.toolchain,
-      components: p.facts.components,
-      patches: p.facts.patches,
-      'not-included': p.cell.leftOut.map((l) => `${l.uses} (${l.reason})`),
-      definition: p.facts.definition,
+      name: t.name, platform: t.platform, license: t.license,
+      redistributable: t.license === 'nonfree' ? 'false' : 'true',
+      assets: { runtime: { name: runtime, sha256: sha256(join(o.dist, runtime)) }, dev: { name: dev, sha256: sha256(join(o.dist, dev)) } },
+      toolchain: t.facts.toolchain,
+      components: t.facts.components,
+      patches: t.facts.patches,
+      'not-included': t.slices.flatMap((p) => p.cell.leftOut.map((l) => `${t.slices.length > 1 ? `${p.target.platform}: ` : ''}${l.uses} (${l.reason})`)),
+      definition: t.facts.definition,
     });
   }
 
@@ -249,7 +269,7 @@ export async function bundle(folder: Folder, data: EngineData, lock: FolderLock,
   writeFileSync(join(o.dist, MANIFEST_FILE), formatManifest(manifest));
   writeFileSync(join(o.dist, 'release-notes.md'), releaseNotes(manifest, rel, repo));
 
-  const assets = [...targets.flatMap((t) => [t.assets.runtime.name, t.assets.dev.name]), sourcesName, MANIFEST_FILE];
+  const assets = [...new Set(targets.flatMap((t) => [t.assets.runtime.name, t.assets.dev.name])), sourcesName, MANIFEST_FILE];
   const sums = assets.map((a) => `${sha256(join(o.dist, a))}  ${a}`).sort((a, b) => a.slice(66).localeCompare(b.slice(66)));
   writeFileSync(join(o.dist, 'SHA256SUMS'), `${sums.join('\n')}\n`);
   assets.push('SHA256SUMS');

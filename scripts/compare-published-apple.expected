@@ -1,6 +1,6 @@
-# Differences scripts/compare-published-macos.sh and compare-published-frameworks.sh expect between an ffmpeg-build
+# Differences scripts/compare-published-macos.sh, compare-published-frameworks.sh and compare-published-ios-bundle.sh expect between an ffmpeg-build
 # Apple archive and the published devenvy/ffmpeg one, per platform: "<platform> <section> <diff line>", where the
-# section is files, flags, deps, binaries, symbols, encoders, decoders, filters, formats, protocols, hwaccels or bsfs, and the
+# section is files, root, slices, plist, flags, deps, binaries, symbols, encoders, decoders, filters, formats, protocols, hwaccels or bsfs, and the
 # diff line starts with - (published) or + (built). Each group says why. Anything not listed here fails the comparison.
 
 # osx-x64 is cross-compiled on Apple silicon; upstream built it natively on an Intel Mac. FFmpeg is told the target.
@@ -140,8 +140,15 @@ osx-arm64 filters -.. xfade_vulkan
 osx-arm64 filters -T. bwdif_vulkan
 osx-arm64 hwaccels -vulkan 
 
-# Vulkan on iOS (MoltenVK, linked statically) isn't built yet: upstream's frameworks have --enable-vulkan(-static) and
-# libavutil's two Vulkan extension functions.
+# Vulkan on iOS (MoltenVK, linked statically) isn't built yet: upstream's frameworks have --enable-vulkan(-static),
+# libplacebo (built on Vulkan; devenvy.yml's Apple targets say without: [placebo]) and libavutil's two Vulkan
+# extension functions.
+ios-arm64 flags -libavcodec.framework: --enable-libplacebo
+ios-arm64 flags -libavfilter.framework: --enable-libplacebo
+ios-arm64 flags -libavformat.framework: --enable-libplacebo
+ios-arm64 flags -libavutil.framework: --enable-libplacebo
+ios-arm64 flags -libswresample.framework: --enable-libplacebo
+ios-arm64 flags -libswscale.framework: --enable-libplacebo
 ios-arm64 flags -libavcodec.framework: --enable-vulkan
 ios-arm64 flags -libavcodec.framework: --enable-vulkan-static
 ios-arm64 flags -libavfilter.framework: --enable-vulkan
@@ -157,8 +164,14 @@ ios-arm64 flags -libswscale.framework: --enable-vulkan-static
 ios-arm64 symbols -libavutil: _av_vk_get_optional_device_extensions
 ios-arm64 symbols -libavutil: _av_vk_get_optional_instance_extensions
 
-# Vulkan on Mac Catalyst isn't built yet (as on maccatalyst-x64), and upstream publishes one universal Catalyst slice:
-# this arm64 build lipo-fused with maccatalyst-x64 at release (step 6, bundle, does the fusing here).
+# Vulkan (and libplacebo, built on it) on Mac Catalyst isn't built yet (as on maccatalyst-x64), and upstream publishes
+# one universal Catalyst slice: this arm64 build lipo-fused with maccatalyst-x64 at release (bundle --apple does it).
+maccatalyst-arm64 flags -libavcodec.framework: --enable-libplacebo
+maccatalyst-arm64 flags -libavfilter.framework: --enable-libplacebo
+maccatalyst-arm64 flags -libavformat.framework: --enable-libplacebo
+maccatalyst-arm64 flags -libavutil.framework: --enable-libplacebo
+maccatalyst-arm64 flags -libswresample.framework: --enable-libplacebo
+maccatalyst-arm64 flags -libswscale.framework: --enable-libplacebo
 maccatalyst-arm64 flags -libavcodec.framework: --enable-vulkan
 maccatalyst-arm64 flags -libavcodec.framework: --enable-vulkan-static
 maccatalyst-arm64 flags -libavfilter.framework: --enable-vulkan
@@ -200,3 +213,34 @@ maccatalyst-arm64 root -legal
 maccatalyst-arm64 root +THIRD-PARTY-NOTICES.txt
 maccatalyst-x64 root -legal
 maccatalyst-x64 root +THIRD-PARTY-NOTICES.txt
+
+# The xcframework bundle (compare-published-ios-bundle.sh, platform ios). Upstream signed only the fused Catalyst
+# frameworks; ffmpeg-build's iOS staging signs every framework ad hoc after install_name_tool (platforms/setup/
+# apple-ios.sh), so the device and simulator frameworks carry _CodeSignature/ too.
+ios binaries -ios-arm64-simulator/libavcodec.framework arm64 platform 7 unsigned
+ios binaries +ios-arm64-simulator/libavcodec.framework arm64 platform 7 signed
+ios binaries -ios-arm64-simulator/libavfilter.framework arm64 platform 7 unsigned
+ios binaries +ios-arm64-simulator/libavfilter.framework arm64 platform 7 signed
+ios binaries -ios-arm64-simulator/libavformat.framework arm64 platform 7 unsigned
+ios binaries +ios-arm64-simulator/libavformat.framework arm64 platform 7 signed
+ios binaries -ios-arm64-simulator/libavutil.framework arm64 platform 7 unsigned
+ios binaries +ios-arm64-simulator/libavutil.framework arm64 platform 7 signed
+ios binaries -ios-arm64-simulator/libswresample.framework arm64 platform 7 unsigned
+ios binaries +ios-arm64-simulator/libswresample.framework arm64 platform 7 signed
+ios binaries -ios-arm64-simulator/libswscale.framework arm64 platform 7 unsigned
+ios binaries +ios-arm64-simulator/libswscale.framework arm64 platform 7 signed
+ios binaries -ios-arm64/libavcodec.framework arm64 platform 2 unsigned
+ios binaries +ios-arm64/libavcodec.framework arm64 platform 2 signed
+ios binaries -ios-arm64/libavfilter.framework arm64 platform 2 unsigned
+ios binaries +ios-arm64/libavfilter.framework arm64 platform 2 signed
+ios binaries -ios-arm64/libavformat.framework arm64 platform 2 unsigned
+ios binaries +ios-arm64/libavformat.framework arm64 platform 2 signed
+ios binaries -ios-arm64/libavutil.framework arm64 platform 2 unsigned
+ios binaries +ios-arm64/libavutil.framework arm64 platform 2 signed
+ios binaries -ios-arm64/libswresample.framework arm64 platform 2 unsigned
+ios binaries +ios-arm64/libswresample.framework arm64 platform 2 signed
+ios binaries -ios-arm64/libswscale.framework arm64 platform 2 unsigned
+ios binaries +ios-arm64/libswscale.framework arm64 platform 2 signed
+# Licence texts: legal/ upstream, one THIRD-PARTY-NOTICES.txt holding the four builds' notices here.
+ios root -legal
+ios root +THIRD-PARTY-NOTICES.txt

@@ -33,6 +33,7 @@ export function checkProfile(loaded: LoadResult, data: EngineData, options: { ta
   return report(profile.file, header, [
     ...entryProblems(profile, data, plan.cells, ctx),
     ...patchProblems(profile, data, ctx),
+    ...testsProblems(profile),
     ...shipsProblems(data, ctx),
     ...withBlocks(profile, data, plan.cells, ctx),
     ...groupBlocks(data, plan.cells, ctx),
@@ -138,6 +139,18 @@ function patchProblems(profile: Profile, data: EngineData, ctx: Ctx): Block[] {
     for (const m of majors.filter((m) => about.ffmpeg.includes(m))) {
       if (!existsSync(join(profile.dir, p, m))) problem(p, `no patches for FFmpeg ${m} (add a ${m}/ folder)`);
     }
+  }
+  return lines.length ? [{ lines }] : [];
+}
+
+/** Each script `tests:` lists: a file inside the folder (`ffmpeg-build test` runs it against the build). */
+function testsProblems(profile: Profile): Block[] {
+  if (!profile.dir || !profile.tests.length) return [];
+  const lines: Line[] = [];
+  for (const t of profile.tests) {
+    const outside = isAbsolute(t) || t.replaceAll('\\', '/').split('/').includes('..');
+    if (outside) lines.push({ mark: '✗', text: `tests: ${t}: a test must be a script inside this folder` });
+    else if (!existsSync(join(profile.dir, t))) lines.push({ mark: '✗', text: `tests: ${t}: no such file (ffmpeg-build test runs it against the build)` });
   }
   return lines.length ? [{ lines }] : [];
 }
