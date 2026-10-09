@@ -1,12 +1,12 @@
-// Step 6a's TypeScript side: licence files in recipe.yml and about.yml, the plan's legal data (governing texts,
-// LICENSE-NOTICE.txt, patch sets, shipped files), and what build passes to the driver for SOURCE_OFFER.txt.
+// The TypeScript side of the licence work: licence files in recipe.yml and about.yml, and the plan's data for
+// THIRD-PARTY-NOTICES.txt (governing texts, the effective licence and why, the header, BUILD and SOURCE sections,
+// patch sets, shipped files), with the build definition build names.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { dockerRunArgs } from '../src/build/docker.ts';
-import { GOVERNING_TEXTS, licenseNotice, makeBuildPlan, plannedPatches } from '../src/build/plan.ts';
+import { GOVERNING_TEXTS, licenseNotice, makeBuildPlan, noticesHeader, noticesSource, plannedPatches } from '../src/build/plan.ts';
 import { publicRepoUrl, sourceIdentity } from '../src/commands/build.ts';
 import { EngineDataError, loadEngineData } from '../src/engine-data.ts';
 import type { LockedProfile } from '../src/lockfile.ts';
@@ -81,11 +81,15 @@ describe("the plan's legal data", () => {
       gplv3: ['COPYING.GPLv3'], nonfree: ['COPYING.GPLv3'], gplv2: ['COPYING.GPLv2'],
       lgplv3: ['COPYING.LGPLv3', 'COPYING.GPLv3'], lgplv2: ['COPYING.LGPLv2.1', 'COPYING.GPLv2'],
     });
-    expect(plan().legal).toMatchObject({ label: 'nonfree', governing: ['COPYING.GPLv3'] });
+    expect(plan().notices.governing).toEqual(['COPYING.GPLv3']);
   });
 
   it("carries the target, licence, sources archive and (when given) the release, and each library's licence files", () => {
-    expect(plan()).toMatchObject({ target: 'dvr-linux', license: 'nonfree', sourcesArchive: 'ffmpeg-9.1.0-sources.tar.gz' });
+    expect(plan()).toMatchObject({ target: 'dvr-linux', license: 'nonfree', sourcesArchive: 'ffmpeg-9.1.0-sources.tar.gz', image: 'linux-x64', toolchain: 'x' });
+    expect(plan().engine).toMatch(/^\d+\.\d+\.\d+/);
+    expect(plan().libraries.find((l) => l.name === 'dav1d')!.license).toBe('BSD-2-Clause');
+    // a release group names its sources archive
+    expect(makeBuildPlan({ profile: dvr, data, locked, cell, variant: 'dvr-linux', imageId: 'x', cacheDir: tmpdir(), group: 'dvr' }).sourcesArchive).toBe('ffmpeg-9.1.0-dvr-sources.tar.gz');
     expect(plan()).not.toHaveProperty('release');
     expect(plan('dvr-9.1.0.0').release).toBe('dvr-9.1.0.0');
     expect(plan().libraries.find((l) => l.name === 'dav1d')!.licenseFiles).toEqual([{ path: 'COPYING' }]);
@@ -94,7 +98,7 @@ describe("the plan's legal data", () => {
 
   it('reads the patch sets: their patches for the FFmpeg major, a hash of them, and their licence texts', () => {
     const [acme] = plan().patches;
-    expect(acme).toEqual({ name: 'acme-muxer', sha256: expect.stringMatching(/^[0-9a-f]{64}$/), files: [], licenses: [{ path: 'LICENSE', text: readFileSync(join(fixtureProfilesDir, 'patches', 'acme-muxer', 'LICENSE'), 'utf8') }] });
+    expect(acme).toEqual({ name: 'acme-muxer', license: 'proprietary', sha256: expect.stringMatching(/^[0-9a-f]{64}$/), files: [], licenses: [{ path: 'LICENSE', text: readFileSync(join(fixtureProfilesDir, 'patches', 'acme-muxer', 'LICENSE'), 'utf8') }] });
     const before = acme!.sha256;
     const dir = mkdtempSync(join(tmpdir(), 'ffmpeg-build-patchset-'));
     execFileSync(process.execPath, ['-e', `require('fs').cpSync(${JSON.stringify(join(fixtureProfilesDir, 'patches'))}, ${JSON.stringify(join(dir, 'patches'))}, { recursive: true })`]);
@@ -108,29 +112,27 @@ describe("the plan's legal data", () => {
   it('lists the notice of what a platform ships', () => {
     const android = build('android-arm64-lgplv3');
     expect(makeBuildPlan({ profile: targetProfile(folder, folder.targets.find((t) => t.name === 'android-arm64-lgplv3')!), data: shipped, locked: { ffmpeg: { '9': '9.0.2' }, libraries: Object.fromEntries(android.recipes.map((r) => [r, '1.0'])), pinned: [] }, cell: android, variant: 'android-arm64-lgplv3', imageId: 'x', cacheDir: tmpdir() }).ships)
-      .toEqual([{ file: 'libc++_shared.so', notice: '${TOOLCHAIN}/NOTICE' }]);
+      .toEqual([{ file: 'libc++_shared.so', license: 'Apache-2.0 WITH LLVM-exception', notice: '${TOOLCHAIN}/NOTICE' }]);
   });
 });
 
-describe('LICENSE-NOTICE.txt', () => {
+describe("THIRD-PARTY-NOTICES.txt's effective licence", () => {
   it('says why a v3 build is v3: the libraries the v2 licence would not allow, and its TLS', () => {
-    const text = licenseNotice(shipped, build('linux-x64-lgplv3'), 'linux-x64-lgplv3');
-    expect(text).toContain('FFmpeg 9.0.2 — linux-x64 (linux-x64-lgplv3)');
+    const text = licenseNotice(shipped, build('linux-x64-lgplv3'));
     expect(text).toContain('EFFECTIVE LICENSE:  LGPLv3 (GNU Lesser General Public License, version 3)');
-    expect(text).toContain('Governing license text: COPYING.LGPLv3 (plus COPYING.GPLv3, which it extends)');
+    expect(text).toContain('Governing license text: COPYING.LGPLv3 (plus COPYING.GPLv3, which it extends); in full under FFMPEG below.');
     for (const part of ['openssl (Apache-2.0)', 'vulkan-loader (Apache-2.0)', 'opencore-amr (Apache-2.0)', 'vo-amrwbenc (Apache-2.0)']) expect(text).toContain(`  ${part}\n`);
     expect(text).not.toContain('  dav1d');
     expect(text).toContain('TLS is openssl (Apache-2.0).');
-    expect(text).toContain('Corresponding source: see SOURCE_OFFER.txt in this directory.');
   });
 
   it('names the TLS member of a v2 build, the OS backend on Windows, or none', () => {
-    const gplv2 = licenseNotice(shipped, build('linux-x64-gplv2'), 'linux-x64-gplv2');
+    const gplv2 = licenseNotice(shipped, build('linux-x64-gplv2'));
     expect(gplv2).toContain('EFFECTIVE LICENSE:  GPLv2 (GNU General Public License, version 2)');
     expect(gplv2).toContain("This is a version 2 build: it doesn't use --enable-version3");
     expect(gplv2).toMatch(/TLS is gnutls \(LGPL-2\.1-or-later[^)]*\)\./);
-    expect(licenseNotice(shipped, build('win-x64-gplv2'), 'win-x64-gplv2')).toContain("TLS is the operating system's schannel backend, which bundles no library.");
-    const lgplv2 = licenseNotice(shipped, build('linux-x64-lgplv2'), 'linux-x64-lgplv2');
+    expect(licenseNotice(shipped, build('win-x64-gplv2'))).toContain("TLS is the operating system's schannel backend, which bundles no library.");
+    const lgplv2 = licenseNotice(shipped, build('linux-x64-lgplv2'));
     expect(lgplv2).toContain('Governing license text: COPYING.LGPLv2.1 (plus COPYING.GPLv2, which it extends)');
     expect(lgplv2).toContain('This build has no TLS: no TLS library LGPLv2.1 allows is available for linux-x64.');
   });
@@ -140,7 +142,7 @@ describe('LICENSE-NOTICE.txt', () => {
     const r = loadProfile(join(fixtureProfilesDir, 'dvr.yml'));
     if (!r.ok) throw new Error('dvr.yml');
     const cell = planProfile(r.profile, data, { '9': '9.1.0' }).cells.find((c) => c.cell.platform === 'linux-x64')!;
-    const text = licenseNotice(data, cell, 'dvr');
+    const text = licenseNotice(data, cell);
     expect(text).toContain('EFFECTIVE LICENSE:  nonfree (not redistributable: configured with --enable-nonfree)');
     expect(text).toContain("Governing license text: COPYING.GPLv3, for FFmpeg's own code");
     expect(text).toContain('This build is NOT REDISTRIBUTABLE. It uses --enable-nonfree: it combines FFmpeg with code whose licence is\nincompatible with the GPL, so it may not be distributed to anyone. It is for internal use only.\n');
@@ -157,7 +159,7 @@ describe('LICENSE-NOTICE.txt', () => {
     }));
     const p = parseProfileText('name: t\nffmpeg: 9\nplatforms: [linux-x64]\nlicense: nonfree\nwith: [libfdk-aac, dav1d]\n', 't.yml');
     if (!p.ok) throw new Error(p.errors.join('\n'));
-    const text = licenseNotice(data, planProfile(p.profile, data, { '9': '9.0.0' }).cells[0]!, 't');
+    const text = licenseNotice(data, planProfile(p.profile, data, { '9': '9.0.0' }).cells[0]!);
     expect(text).toContain('The libraries that make it nonfree:\n  fdk-aac (FDK-AAC)\n');
     expect(text).not.toContain('dav1d (');
     expect(text).not.toContain('compatible with version 3');
@@ -168,38 +170,70 @@ describe('LICENSE-NOTICE.txt', () => {
     const profile = { ...targetProfile(folder, t), with: targetProfile(folder, t).with.filter((w) => w.name !== 'openssl') };
     const cell = planProfile(profile, shipped, { '9': '9.0.2' }).cells[0]!;
     expect(cell.groups.tls).toBeUndefined();
-    expect(licenseNotice(shipped, cell, 't')).toContain('\nThis build has no TLS library.\n');
+    expect(licenseNotice(shipped, cell)).toContain('\nThis build has no TLS library.\n');
   });
 });
 
-describe('the source repository SOURCE_OFFER.txt names', () => {
-  it('is passed into the container', () => {
-    const args = dockerRunArgs({ tag: 'img:1', recipes: 'r', engine: 'e', cache: 'c', out: 'o', plan: 'p', env: { FFMPEG_BUILD_SOURCE_REPO: 'https://example.com/r', FFMPEG_BUILD_SOURCE_REF: 'abc' } });
-    expect(args.slice(0, 7)).toEqual(['run', '--rm', '--init', '-e', 'FFMPEG_BUILD_SOURCE_REPO=https://example.com/r', '-e', 'FFMPEG_BUILD_SOURCE_REF=abc']);
-  });
-
+describe('the build definition THIRD-PARTY-NOTICES.txt names', () => {
   it('comes from FFMPEG_BUILD_SOURCE_REPO / _REF, else the folder\'s git remote and HEAD, without credentials', () => {
-    expect(sourceIdentity(tmpdir(), { FFMPEG_BUILD_SOURCE_REPO: 'https://example.com/r', FFMPEG_BUILD_SOURCE_REF: 'abc' })).toEqual({ FFMPEG_BUILD_SOURCE_REPO: 'https://example.com/r', FFMPEG_BUILD_SOURCE_REF: 'abc' });
+    expect(sourceIdentity(tmpdir(), { FFMPEG_BUILD_SOURCE_REPO: 'https://example.com/r', FFMPEG_BUILD_SOURCE_REF: 'abc' })).toEqual({ repo: 'https://example.com/r', ref: 'abc' });
     const dir = mkdtempSync(join(tmpdir(), 'ffmpeg-build-repo-'));
-    expect(sourceIdentity(dir, {})).toEqual({}); // not a checkout: the offer's fallback wording
+    expect(sourceIdentity(dir, {})).toEqual({}); // not a checkout: the notices say it wasn't recorded
     const g = (...args: string[]) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim();
     g('init', '-q');
     g('remote', 'add', 'origin', 'https://bot:s3cret@github.com/acme/media.git');
     writeFileSync(join(dir, 'ffmpeg-build.yml'), 'targets: {}\n');
     g('add', '-A');
     g('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'one');
-    expect(sourceIdentity(dir, {})).toEqual({ FFMPEG_BUILD_SOURCE_REPO: 'https://github.com/acme/media', FFMPEG_BUILD_SOURCE_REF: g('rev-parse', 'HEAD') });
+    expect(sourceIdentity(dir, {})).toEqual({ repo: 'https://github.com/acme/media', ref: g('rev-parse', 'HEAD') });
     // a change to a tracked file marks the commit -dirty; the build's own untracked output doesn't
     writeFileSync(join(dir, 'dist.tar.gz'), 'x');
-    expect(sourceIdentity(dir, {}).FFMPEG_BUILD_SOURCE_REF).toBe(g('rev-parse', 'HEAD'));
+    expect(sourceIdentity(dir, {}).ref).toBe(g('rev-parse', 'HEAD'));
     writeFileSync(join(dir, 'ffmpeg-build.yml'), 'targets: { a: { platform: linux-x64, license: lgplv3, ffmpeg: "9" } }\n');
-    expect(sourceIdentity(dir, {}).FFMPEG_BUILD_SOURCE_REF).toBe(`${g('rev-parse', 'HEAD')}-dirty`);
+    expect(sourceIdentity(dir, {}).ref).toBe(`${g('rev-parse', 'HEAD')}-dirty`);
     // a remote that is a folder on this machine is no repository a reader can open: the fallback wording
     g('remote', 'set-url', 'origin', dir);
-    expect(sourceIdentity(dir, {})).not.toHaveProperty('FFMPEG_BUILD_SOURCE_REPO');
+    expect(sourceIdentity(dir, {})).not.toHaveProperty('repo');
     g('remote', 'set-url', 'origin', 'file:///srv/git/media.git');
-    expect(sourceIdentity(dir, {})).not.toHaveProperty('FFMPEG_BUILD_SOURCE_REPO');
+    expect(sourceIdentity(dir, {})).not.toHaveProperty('repo');
     expect(publicRepoUrl('git@github.com:acme/media.git')).toBe('https://github.com/acme/media');
     expect(publicRepoUrl('ssh://git@example.com/acme/media.git')).toBe('ssh://example.com/acme/media');
+  });
+});
+
+describe("THIRD-PARTY-NOTICES.txt's header and SOURCE section", () => {
+  const base = { name: 'ffmpeg-9.0.2-linux-x64-lgplv3', version: '9.0.2', license: 'lgplv3' as const, sourcesArchive: 'ffmpeg-9.0.2-sources.tar.gz', ffmpegTarball: 'https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz' };
+  const noRequest = (text: string) => expect(text).not.toMatch(/on request|upon request|write to|contact|send (us|you)|ask (us|the)/i);
+
+  it('names a release sources archive by its URL, and the build definition as a link to the commit', () => {
+    const text = noticesSource({ ...base, release: '9.0.2.4', repository: 'devenvy/ffmpeg', source: { repo: 'https://github.com/devenvy/ffmpeg', ref: 'abc123' } });
+    expect(text).toContain('  https://github.com/devenvy/ffmpeg/releases/download/9.0.2.4/ffmpeg-9.0.2-sources.tar.gz\n');
+    expect(text).toContain('holds the complete corresponding source for this build');
+    expect(text).toContain('Build definition: https://github.com/devenvy/ffmpeg/tree/abc123\n');
+    expect(text).toContain('FFmpeg 9.0.2, unmodified upstream: https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz\n');
+    expect(text).toContain('no request to the distributor is necessary');
+    noRequest(text);
+  });
+
+  it('spells out a build with no release: where its source is recorded, and that it must be published first', () => {
+    const text = noticesSource({ ...base, source: { repo: 'https://git.example.com/media', ref: 'abc123-dirty' } });
+    expect(text).toContain('This build was not published in a release');
+    expect(text).toContain('It must be published together with its sources archive (ffmpeg-9.0.2-sources.tar.gz) before it is\ndistributed.');
+    expect(text).toContain('Build definition: https://git.example.com/media at commit abc123\n  (built with local changes to that commit');
+    expect(noticesSource({ ...base, source: {} })).toContain('Build definition: not recorded');
+    noRequest(text);
+  });
+
+  it('says a nonfree build is for internal use only', () => {
+    expect(noticesSource({ ...base, license: 'nonfree', source: {} })).toContain('it is for internal use only and is not offered for redistribution');
+    expect(noticesSource({ ...base, source: {} })).not.toContain('internal use');
+  });
+
+  it('starts with FFmpeg and the engine, and names the patch sets that modified FFmpeg', () => {
+    const patches = [{ name: 'acme', license: 'MIT', sha256: 'f'.repeat(64), files: [{ name: '0001-a.patch', text: '' }, { name: '0002-b.patch', text: '' }], licenses: [] }];
+    const header = noticesHeader({ version: '9.0.2', target: 't', platform: 'linux-x64', engine: '1.2.3', licence: 'EFFECTIVE LICENSE:  LGPLv3\n', patches });
+    expect(header.split('\n')[0]).toBe('FFmpeg 9.0.2 — t (linux-x64), built by ffmpeg-build 1.2.3');
+    expect(header).toContain(`FFmpeg was modified by these patch sets (applied to its source before it was configured; see PATCH SETS below):\n  acme: 2 patches (0001-a.patch, 0002-b.patch), sha256 ${'f'.repeat(64)}\n`);
+    expect(noticesHeader({ version: '9.0.2', target: 't', platform: 'linux-x64', engine: '1.2.3', licence: 'x\n', patches: [] })).not.toContain('modified');
   });
 });

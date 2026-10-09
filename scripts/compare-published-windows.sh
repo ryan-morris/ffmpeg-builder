@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Compares a Windows archive built by ffmpeg-build with a published one. The programs can't run on a Linux host, so it
 # compares what can be read from the files, inside the Windows toolchain image (llvm-objdump reads x64 and ARM64 PE):
-#   - the files in the runtime archive (legal/ aside);
-#   - the names of the files under legal/;
+#   - the files at the top of the runtime archive
+#     (one expected difference: published archives have legal/, ffmpeg-build THIRD-PARTY-NOTICES.txt);
 #   - FFmpeg's configure line as embedded in ffmpeg.exe, apart from build-machine paths (--prefix) and the --extra-*
 #     flags (paths, and upstream passed link libraries there that ffmpeg-build puts in each library's .pc file);
 #   - every DLL's and program's imports: what Windows must find to load it.
@@ -34,8 +34,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -e "EXPECTED=${expected}" \
     for side in built published; do
       mkdir -p "/$side"
       tar -xzf "/$side.tar.gz" -C "/$side"
-      (cd "/$side" && find . -mindepth 1 -maxdepth 1 ! -name legal | sed "s|^\./||" | LC_ALL=C sort) > "/$side.files"
-      (cd "/$side" && find legal -type f | LC_ALL=C sort) > "/$side.legal"
+      (cd "/$side" && find . -mindepth 1 -maxdepth 1 | sed "s|^\./||" | LC_ALL=C sort) > "/$side.files"
       grep -aom1 -- "--prefix=[ -~]*" "/$side/ffmpeg.exe" | sed "s/ --/\n--/g" \
         | grep -v -e "^--prefix=" -e "^--extra-" | LC_ALL=C sort -u > "/$side.flags"
       : > "/$side.imports"
@@ -54,11 +53,10 @@ MSYS_NO_PATHCONV=1 docker run --rm -e "EXPECTED=${expected}" \
       if [ -s /d.bad ]; then echo "$2 differ (- published, + built):"; cat /d.bad; status=1; fi
     }
     compare files "Runtime files" /published.files /built.files
-    compare legal "Files under legal/" /published.legal /built.legal
     compare flags "Configure flags" /published.flags /built.flags
     compare imports "DLL imports" /published.imports /built.imports
     if [ "$status" -eq 0 ]; then
-      echo "Same runtime files, legal/ files ($(wc -l < /built.legal)), configure flags and DLL imports ($(wc -l < /built.flags) flags, $(wc -l < /built.imports) imports), but for ${seen} expected differences (scripts/compare-published.expected)."
+      echo "Same runtime files, configure flags and DLL imports ($(wc -l < /built.flags) flags, $(wc -l < /built.imports) imports), but for ${seen} expected differences (scripts/compare-published.expected)."
     fi
     exit "$status"
   '

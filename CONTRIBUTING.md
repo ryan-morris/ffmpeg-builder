@@ -34,7 +34,7 @@ fails when it is stale).
   counterpart exists, compared with it (`scripts/compare-published*.sh`). Say in the pull request what you built and
   paste the comparison's last lines. A difference you mean to keep goes in the matching `*.expected` file, with its
   reason.
-- **A new library** needs its recipe's `license-files:` (the licence texts in its source, which `legal/` ships) and its
+- **A new library** needs its recipe's `license-files:` (the licence texts in its source, which `THIRD-PARTY-NOTICES.txt` carries) and its
   SPDX licence in `recipe.yml`; `check` and the licence table do the rest.
 - **The `ffmpeg-build.yml` format** is a public interface: describe the change in an issue first, and give it a
   `migrate` path if existing folders would break.

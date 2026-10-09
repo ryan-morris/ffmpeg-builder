@@ -14,8 +14,8 @@
 # Legal files and sources (docs/building.md): each library's declared licence
 # files are copied into its install tree (share/ffmpeg-build/legal/<recipe>/), with a record of its source
 # (share/ffmpeg-build/sources/<recipe>.json), so a library from the cache brings both. Every fetched source is kept
-# in the cache under sources/, never overwritten. Both archives get legal/, and <name>.sources.json lists what the
-# build was made from.
+# in the cache under sources/, never overwritten. Both archives get THIRD-PARTY-NOTICES.txt at their root (notices.sh),
+# and <name>.sources.json lists what the build was made from.
 set -euo pipefail
 
 PLAN="${FFB_PLAN:-/plan.json}"
@@ -213,74 +213,9 @@ source_record() {
     '{name: $name, version: $version, origin: $url, file: $file, sha256: $sha} + (if $commit == "" then {} else {commit: $commit} end)'
 }
 
-# expand_vars and fill_template
+# write_notices, check_notices and expand_vars: THIRD-PARTY-NOTICES.txt
 # shellcheck source=/dev/null
-source "${ENGINE}/legal/helpers.sh"
-
-# write_legal <legal folder>: upstream's 10_write_legal.sh, from the plan. FFmpeg's LICENSE.md and CREDITS, the
-# COPYING texts that govern the build's licence, licenses/<recipe>/ from each library's install tree,
-# licenses/patches-<set>/, licenses/<file>/ for each file the platform ships, LICENSE-NOTICE.txt and SOURCE_OFFER.txt.
-write_legal() {
-  local legal="$1" ff="${WORK}/ffmpeg" f name n i j file notice
-  mkdir -p "${legal}/licenses"
-  for f in LICENSE.md CREDITS $(jq -r '.legal.governing[]' "${PLAN}"); do
-    [ -f "${ff}/${f}" ] || { echo "ERROR: FFmpeg's source has no ${f} for legal/" >&2; exit 1; }
-    cp "${ff}/${f}" "${legal}/"
-  done
-  while read -r name; do
-    [ -d "${DEPS_DIR}/${FFB_SHARE}/legal/${name}" ] || { echo "ERROR: ${name} has no licence files in ${DEPS_DIR}/${FFB_SHARE}/legal" >&2; exit 1; }
-    cp -a "${DEPS_DIR}/${FFB_SHARE}/legal/${name}" "${legal}/licenses/${name}"
-  done < <(jq -r '.libraries[].name' "${PLAN}")
-  n="$(jq '.patches | length' "${PLAN}")"
-  for ((i = 0; i < n; i++)); do
-    name="$(jq -r ".patches[${i}].name" "${PLAN}")"
-    for ((j = 0; j < $(jq ".patches[${i}].licenses | length" "${PLAN}"); j++)); do
-      file="${legal}/licenses/patches-${name}/$(jq -r ".patches[${i}].licenses[${j}].path" "${PLAN}")"
-      mkdir -p "$(dirname "${file}")"
-      jq -j ".patches[${i}].licenses[${j}].text" "${PLAN}" >"${file}"
-    done
-  done
-  while IFS=$'\t' read -r file notice; do
-    [ -n "${file}" ] || continue
-    notice="$(expand_vars "${notice}")" || exit 1
-    [ -f "${notice}" ] || { echo "ERROR: ${notice}, the notice platforms.yml names for ${file}, is missing" >&2; exit 1; }
-    mkdir -p "${legal}/licenses/${file}"
-    cp "${notice}" "${legal}/licenses/${file}/$(basename "${notice}")"
-  done < <(jq -r '.ships[] | [.file, .notice] | @tsv' "${PLAN}")
-  jq -j '.legal.notice' "${PLAN}" >"${legal}/LICENSE-NOTICE.txt"
-
-  # SOURCE_OFFER.txt: the repository and commit come from FFMPEG_BUILD_SOURCE_REPO / _REF (CI sets them; a local
-  # build passes the folder's git remote and HEAD), the release from the plan
-  local release sources
-  release="$(jq -r '.release // empty' "${PLAN}")"
-  sources="$(jq -r .sourcesArchive "${PLAN}")"
-  OFFER_FFMPEG_VERSION="$(jq -r .ffmpeg.version "${PLAN}")"
-  OFFER_LICENSE="$(jq -r .legal.label "${PLAN}")"
-  OFFER_GNU="GNU ${OFFER_LICENSE}"
-  OFFER_INTERNAL=""
-  if [ "${OFFER_LICENSE}" = nonfree ]; then
-    OFFER_GNU="GNU GPLv3, which governs FFmpeg's own code"
-    OFFER_INTERNAL="
-
-This is a nonfree build (--enable-nonfree): it is for internal use only and is not
-offered for redistribution, to anyone."
-  fi
-  OFFER_PLATFORM="${RID}"
-  OFFER_TARGET="$(jq -r .target "${PLAN}")"
-  OFFER_REPO="${FFMPEG_BUILD_SOURCE_REPO:-the public build repository this artifact was produced from}"
-  [ -n "${FFMPEG_BUILD_SOURCE_REPO:-}" ] && [ -n "${FFMPEG_BUILD_SOURCE_REF:-}" ] && OFFER_REPO="${FFMPEG_BUILD_SOURCE_REPO} (commit ${FFMPEG_BUILD_SOURCE_REF})"
-  if [ -n "${release}" ]; then
-    OFFER_RELEASE="It ships in release ${release}. That release's sources archive, ${sources},
-is attached to the release beside this archive."
-  else
-    OFFER_RELEASE="This build is unreleased: it was not published in a release, so no sources archive
-was published with it. The sources it was built from are listed, with their
-sha256, in ${NAME}.sources.json beside it; a release of it carries them in
-${sources}."
-  fi
-  export OFFER_FFMPEG_VERSION OFFER_LICENSE OFFER_GNU OFFER_INTERNAL OFFER_PLATFORM OFFER_TARGET OFFER_REPO OFFER_RELEASE
-  fill_template "${ENGINE}/legal/SOURCE_OFFER.txt" >"${legal}/SOURCE_OFFER.txt"
-}
+source "${ENGINE}/notices.sh"
 
 # Everything under DEPS_DIR with size, mtime, mode and link target: comparing two listings shows what a build
 # added or changed. (A build that deletes files from DEPS_DIR can't be replayed from the cache; none does. A build
@@ -402,8 +337,11 @@ RUN="${WORK}/stage/run"
 DEV="${WORK}/stage/dev"
 mkdir -p "${RUN}" "${DEV}"
 stage "${WORK}/install" "${RUN}" "${DEV}"
-write_legal "${RUN}/legal"
-cp -a "${RUN}/legal" "${DEV}/"
+# one file at the root of both archives carries every licence and notice (in place of upstream's legal/ folder)
+write_notices "${RUN}/THIRD-PARTY-NOTICES.txt" "${WORK}/ffmpeg" "${WORK}/sources.jsonl"
+cp "${RUN}/THIRD-PARTY-NOTICES.txt" "${DEV}/"
+check_notices "${RUN}/THIRD-PARTY-NOTICES.txt"
+check_notices "${DEV}/THIRD-PARTY-NOTICES.txt"
 
 step "checking ${NAME}"
 check_stage "${RUN}"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # compare-published.sh for macOS archives, run natively on a Mac. Compares:
-#   - the files in the runtime archive (legal/ aside), and the names of the files under legal/ (expected differences
-#     for those are listed per build, <platform>-<license>);
+#   - the files at the top of the runtime archive
+#     (one expected difference: published archives have legal/, ffmpeg-build THIRD-PARTY-NOTICES.txt);
 #   - FFmpeg's configure line, apart from build-machine paths (--prefix, -I/-L folders) and the --extra-* flags
 #     (--extra-libs: upstream passed link libraries there, ffmpeg-build puts them in each library's .pc file);
 #   - each Mach-O's architectures, minimum macOS, install name and the shipped libraries it loads (@rpath; the system
@@ -24,7 +24,7 @@ set -euo pipefail
 name_re='^ffmpeg-[0-9.]+-(.+)-(lgplv2|lgplv3|gplv2|gplv3|nonfree)\.tar\.gz$'
 [[ "$(basename "$1")" =~ ${name_re} ]] || { echo "can't tell the platform from $(basename "$1") (expected ffmpeg-<version>-<platform>-<license>.tar.gz)" >&2; exit 2; }
 platform="${BASH_REMATCH[1]}"
-build="${platform}-${BASH_REMATCH[2]}" # legal/ differences are per build: they differ by licence
+build="${platform}-${BASH_REMATCH[2]}" # differences can also be listed per build
 expected="$(sed -n -e "s/^${platform} \{1,\}\([a-z]\{1,\}\) \{1,\}\([-+].*\)$/\1 \2/p" -e "s/^${build} \{1,\}\([a-z]\{1,\}\) \{1,\}\([-+].*\)$/\1 \2/p" \
   "$(dirname "$0")/compare-published-apple.expected")"
 tmp="$(mktemp -d)"
@@ -35,8 +35,7 @@ for side in built published; do
   [ "${side}" = published ] && archive="$2"
   mkdir -p "${tmp}/${side}"
   tar -xzf "${archive}" -C "${tmp}/${side}"
-  (cd "${tmp}/${side}" && find . -mindepth 1 -maxdepth 1 ! -name legal | sed 's|^\./||' | LC_ALL=C sort) >"${tmp}/${side}.files"
-  (cd "${tmp}/${side}" && find legal -type f | LC_ALL=C sort) >"${tmp}/${side}.legal"
+  (cd "${tmp}/${side}" && find . -mindepth 1 -maxdepth 1 | sed 's|^\./||' | LC_ALL=C sort) >"${tmp}/${side}.files"
   : >"${tmp}/${side}.deps"
   : >"${tmp}/${side}.symbols"
   for bin in "${tmp}/${side}/ffmpeg" "${tmp}/${side}/ffprobe" "${tmp}/${side}"/*.dylib; do
@@ -111,7 +110,6 @@ compare() { # <section> <label> <published file> <built file>
   fi
 }
 compare files "Runtime files" "${tmp}/published.files" "${tmp}/built.files"
-compare legal "Files under legal/" "${tmp}/published.legal" "${tmp}/built.legal"
 compare flags "Configure flags" "${tmp}/published.flags" "${tmp}/built.flags"
 compare deps "Mach-O facts" "${tmp}/published.deps" "${tmp}/built.deps"
 if [ "${runs}" -eq 1 ]; then
@@ -128,7 +126,7 @@ if [ -n "${stale}" ]; then
   printf '  %s\n' "${stale}"
 fi
 if [ "${status}" -eq 0 ]; then
-  what="runtime files, legal/ files ($(wc -l <"${tmp}/built.legal" | tr -d ' ')), configure flags and Mach-O facts ($(wc -l <"${tmp}/built.deps" | tr -d ' ') binaries)"
+  what="runtime files, configure flags and Mach-O facts ($(wc -l <"${tmp}/built.deps" | tr -d ' ') binaries)"
   if [ "${runs}" -eq 1 ]; then
     what="${what} and registered components ($(for w in ${lists}; do printf '%s %s, ' "$(wc -l <"${tmp}/built.${w}" | tr -d ' ')" "${w}"; done | sed 's/, $//'))"
   else

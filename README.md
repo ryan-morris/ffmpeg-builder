@@ -73,7 +73,7 @@ problem (the message says which).
 ## Documentation
 
 - [Targets](docs/targets.md): `ffmpeg-build.yml`, bases, licenses, pins, updates
-- [Building](docs/building.md): toolchains, caching, `legal/`, what a build was made from
+- [Building](docs/building.md): toolchains, caching, `THIRD-PARTY-NOTICES.txt`, what a build was made from
 - [Releases, CI and products](docs/releases.md): release tags, workflows, `fetch`
 - [The guide](AGENTS.md) (`ffmpeg-build guide`): the commands in the order you'd use them
 
@@ -89,4 +89,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how recipes, platforms and the parity
 ## License
 
 The engine is [MIT](LICENSE). The FFmpeg builds it produces are under the license each target chooses (LGPL or GPL,
-or nonfree for internal use), and carry every component's license in `legal/`.
+or nonfree for internal use), and carry every component's license in `THIRD-PARTY-NOTICES.txt` at their root.

@@ -4,7 +4,8 @@ import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { BuildError, dockerCommand, dockerRunArgs, dockerStatus, ensureImage, runStreaming } from '../build/docker.ts';
 import { acquireBuildLock, hostEnv, hostToolchainIdentity, nativeBash, nativeEnv, nativePaths, nativePreflight, nativeWorkRoot } from '../build/native.ts';
-import { makeBuildPlan, toolchainIdentity } from '../build/plan.ts';
+import { makeBuildPlan, toolchainIdentity, type BuildSource } from '../build/plan.ts';
+import { publishingRepo } from '../release-remote.ts';
 import { LOCK_FILE, readFolderLock, type LockedProfile } from '../lockfile.ts';
 import type { CellPlan } from '../resolve.ts';
 import type { PlatformEntry } from '../schema/engine.ts';
@@ -35,11 +36,11 @@ function isRemoteUrl(remote: string): boolean {
 }
 
 /**
- * The repository and commit legal/SOURCE_OFFER.txt names: FFMPEG_BUILD_SOURCE_REPO / _REF (CI sets them), else the
+ * The repository and commit THIRD-PARTY-NOTICES.txt names: FFMPEG_BUILD_SOURCE_REPO / _REF (CI sets them), else the
  * folder's git remote (origin, when it is a URL rather than a local path) and HEAD, with -dirty when tracked files
- * have changes HEAD doesn't hold. Missing ones are left out (the offer then uses its fallback wording).
+ * have changes HEAD doesn't hold. Missing ones are left out (the notices then say it wasn't recorded).
  */
-export function sourceIdentity(dir: string, env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function sourceIdentity(dir: string, env: NodeJS.ProcessEnv = process.env): BuildSource {
   const git = (args: string[]): string | undefined => {
     try {
       return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000 }).trim();
@@ -55,7 +56,7 @@ export function sourceIdentity(dir: string, env: NodeJS.ProcessEnv = process.env
     // tracked files only: the build's own output (dist/) is usually untracked
     if (head) ref = git(['status', '--porcelain', '--untracked-files=no']) ? `${head}-dirty` : head;
   }
-  return { ...(repo ? { FFMPEG_BUILD_SOURCE_REPO: publicRepoUrl(repo) } : {}), ...(ref ? { FFMPEG_BUILD_SOURCE_REF: ref } : {}) };
+  return { ...(repo ? { repo: publicRepoUrl(repo) } : {}), ...(ref ? { ref } : {}) };
 }
 
 export function cacheRoot(): string {
@@ -90,7 +91,7 @@ export async function runTargetBuild(folder: Folder, name: string, data: EngineD
   const [cell] = planProfile(profile, data, { [t.ffmpeg]: version }).cells;
   const buildName = artifactName(t, version);
   if (options.dryRun) return { output: `would build ${buildName} (${t.platform}) in ${entry.image === 'macos' ? 'Xcode on this Mac' : `ffmpeg-build-${entry.image}`}`, exitCode: 0 };
-  return runJob({ platform: t.platform, target: entry, profile, locked: { ffmpeg: lock.ffmpeg, libraries: lock.libraries, pinned: [] }, out: options.out, builds: [{ cell: cell!, variant: t.name, name: buildName }] }, data);
+  return runJob({ platform: t.platform, target: entry, profile, locked: { ffmpeg: lock.ffmpeg, libraries: lock.libraries, pinned: [] }, out: options.out, builds: [{ cell: cell!, variant: t.name, name: buildName, ...(t.releaseGroup ? { group: t.releaseGroup } : {}) }] }, data);
 }
 
 interface Job {
@@ -99,7 +100,7 @@ interface Job {
   profile: Profile;
   locked: LockedProfile;
   out: string;
-  builds: { cell: CellPlan; variant: string; name?: string }[];
+  builds: { cell: CellPlan; variant: string; name?: string; group?: string }[];
 }
 
 /** Runs the builds of one platform: in its toolchain image, or natively on a Mac. */
@@ -132,11 +133,19 @@ async function runJob(job: Job, data: EngineData): Promise<Result> {
     const image = native ? undefined : await ensureImage(packageRoot, target.image);
     const toolchain = paths ? hostToolchainIdentity(packageRoot, target.setup, options.platform, paths.depsDir) : toolchainIdentity(packageRoot, image!.id, target.setup);
     const built: string[] = [];
-    const sourceEnv = sourceIdentity(profile.dir ?? process.cwd());
-    for (const { cell, variant, name } of job.builds) {
+    // what THIRD-PARTY-NOTICES.txt names as the source: the build's definition, and the release it ships in
+    // (FFMPEG_BUILD_RELEASE, set by the build workflow) with the repository it is published in
+    const folderDir = profile.dir ?? process.cwd();
+    const source = sourceIdentity(folderDir);
+    const releaseTag = process.env.FFMPEG_BUILD_RELEASE || undefined;
+    const repository = releaseTag ? publishingRepo(folderDir) : undefined;
+    for (const { cell, variant, name, group } of job.builds) {
       const plan = makeBuildPlan({
         profile, data, locked, cell, imageId: toolchain, cacheDir: libs,
-        variant,
+        variant, source,
+        ...(releaseTag ? { release: releaseTag } : {}),
+        ...(repository ? { repository } : {}),
+        ...(group ? { group } : {}),
         ...(name ? { name } : {}),
         ...(paths ? { depsDir: paths.depsDir } : {}),
       });
@@ -150,9 +159,9 @@ async function runJob(job: Job, data: EngineData): Promise<Result> {
           // a container starts empty every time; a native build starts from empty folders instead
           for (const dir of [paths.depsDir, paths.work]) rmSync(dir, { recursive: true, force: true });
           const env = nativeEnv({ plan: planPath, recipes: join(data.root, 'recipes'), engine: join(packageRoot, 'platforms'), cache: cacheRoot(), out, ...paths });
-          result = await runStreaming(nativeBash(), [join(packageRoot, 'platforms', 'driver.sh')], log, { ...hostEnv(), ...env, ...sourceEnv });
+          result = await runStreaming(nativeBash(), [join(packageRoot, 'platforms', 'driver.sh')], log, { ...hostEnv(), ...env });
         } else {
-          const args = dockerRunArgs({ tag: image!.tag, recipes: join(data.root, 'recipes'), engine: join(packageRoot, 'platforms'), cache: cacheRoot(), out, plan: planPath, env: sourceEnv });
+          const args = dockerRunArgs({ tag: image!.tag, recipes: join(data.root, 'recipes'), engine: join(packageRoot, 'platforms'), cache: cacheRoot(), out, plan: planPath });
           result = await runStreaming(dockerCommand(), args, log);
         }
       } finally {

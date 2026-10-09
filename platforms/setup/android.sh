@@ -60,7 +60,7 @@ before_ffmpeg() {
 # Upstream 08_stage_artifacts.sh (android): headers and lib/<abi>/*.so under their unversioned names (Android loads
 # libraries by file name), with the sonames and the libraries' references to each other rewritten to match, plus the
 # NDK's libc++_shared.so (the C++ codec libraries need it at run time; Android doesn't provide it). Its licence text
-# is the notice platforms.yml's ships: names, which the driver copies into legal/. The -dev archive holds the headers
+# is the notice platforms.yml's ships: names, which the driver puts in THIRD-PARTY-NOTICES.txt. The -dev archive holds the headers
 # and relocatable .pc files.
 stage() {
   local install="$1" run="$2" dev="$3" so real base dep n pc glob files
@@ -123,7 +123,7 @@ check_stage() {
   local so soname dep bad=""
   local libdir="$1/lib/${ANDROID_ABI}"
   [ -f "${libdir}/libavcodec.so" ] && [ -f "${libdir}/libc++_shared.so" ] || { echo "ERROR: lib/${ANDROID_ABI} lacks libavcodec.so or libc++_shared.so" >&2; exit 1; }
-  [ -f "$1/legal/licenses/libc++_shared.so/NOTICE" ] || { echo "ERROR: the archive lacks libc++'s licence text (legal/licenses/libc++_shared.so/NOTICE)" >&2; exit 1; }
+  grep -qxF '== libc++_shared.so ==' "$1/THIRD-PARTY-NOTICES.txt" || { echo "ERROR: THIRD-PARTY-NOTICES.txt lacks libc++_shared.so's licence text" >&2; exit 1; }
   check_page_align "${libdir}"/*.so
   if jq -e '.ffmpeg.configure | index("--enable-mediacodec")' "${PLAN}" >/dev/null; then
     patchelf --print-needed "${libdir}/libavcodec.so" | grep -qx libmediandk.so \

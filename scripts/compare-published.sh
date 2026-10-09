@@ -6,15 +6,15 @@
 # (not a clean Raspberry Pi OS, so a library the sysroot has but a Pi lacks would go unnoticed there).
 # COMPARE_IMAGE=manylinux-arm64 and alpine-arm64 are the same clean images for arm64 builds (linux-arm64,
 # linux-musl-arm64): native on an arm64 host, emulated by Docker on an x64 one. What it compares:
-#   - the files in the runtime archive (legal/ aside), and where each symlink points;
-#   - the names of the files under legal/ (from the archive's listing, not unpacked; their contents are tested on
-#     ffmpeg-build's own output instead);
+#   - the files at the top of the runtime archive
+#     (one expected difference: published archives have legal/, ffmpeg-build THIRD-PARTY-NOTICES.txt), and where
+#     each symlink points;
 #   - FFmpeg's configure line (ffmpeg -buildconf), apart from build-machine paths (--prefix, -I/-L folders) and
 #     --extra-libs: upstream passed link libraries there, ffmpeg-build puts them in each library's .pc file;
 #   - what FFmpeg registers: encoders, decoders, filters, formats, protocols, hwaccels, bitstream filters;
 #   - each program's and library's soname, needed libraries and rpath (readelf).
 # Differences listed for the platform in scripts/compare-published.expected (each with its reason), or for the build
-# (<platform>-<license>: legal/ differs by licence), are reported as expected and don't fail the comparison; anything
+# (<platform>-<license>), are reported as expected and don't fail the comparison; anything
 # else does.
 #
 #   scripts/compare-published.sh dist/ffmpeg-9.0.2-linux-x64-lgplv3.tar.gz path/to/published/ffmpeg-9.0.2-linux-x64-lgplv3.tar.gz
@@ -60,10 +60,9 @@ MSYS_NO_PATHCONV=1 docker run --rm ${PLATFORM:+--platform "${PLATFORM}"} -e "RUN
     lists="encoders decoders filters formats protocols hwaccels bsfs"
     for side in built published; do
       mkdir -p "/$side"
-      # legal/ is not compared, so it is not unpacked (a guard too: tar under qemu 9.2 fails to create files in it)
+      # legal/ is only named, so it is not unpacked (a guard too: tar under qemu 9.2 fails to create files in it)
       tar -xzf "/$side.tar.gz" -C "/$side" --exclude=./legal
-      (cd "/$side" && find . -mindepth 1 -maxdepth 1 ! -name legal | sed "s|^\./||" | LC_ALL=C sort) > "/$side.files"
-      tar -tzf "/$side.tar.gz" | sed "s|^\./||" | grep "^legal/." | grep -v "/\$" | LC_ALL=C sort > "/$side.legal"
+      tar -tzf "/$side.tar.gz" | sed "s|^\./||" | cut -d/ -f1 | grep -v "^\$" | LC_ALL=C sort -u > "/$side.files"
       (cd "/$side" && for l in $(find . -maxdepth 1 -type l | LC_ALL=C sort); do echo "${l#./} -> $(readlink "$l")"; done) > "/$side.links"
       $RUN "/$side/ffmpeg" -hide_banner -buildconf | sed -n "s/^ *\(--.*\)$/\1/p" \
         | grep -v -e "^--prefix=" -e "^--extra-cflags=" -e "^--extra-ldflags=" -e "^--extra-libs=" \
@@ -89,13 +88,12 @@ MSYS_NO_PATHCONV=1 docker run --rm ${PLATFORM:+--platform "${PLATFORM}"} -e "RUN
     }
     compare files "Runtime files" /published.files /built.files
     compare links "Symlinks" /published.links /built.links
-    compare legal "Files under legal/" /published.legal /built.legal
     compare flags "Configure flags" /published.flags /built.flags
     for what in $lists; do compare "$what" "Registered $what" "/published.$what" "/built.$what"; done
     compare deps "Sonames and dependencies" /published.deps /built.deps
     if [ "$status" -eq 0 ]; then
       echo "Same runtime files, configure flags and registered components ($(for w in $lists; do printf "%s %s, " "$(wc -l < /built.$w)" "$w"; done | sed "s/, $//"))."
-      echo "Same symlinks ($(wc -l < /built.links)), legal/ files ($(wc -l < /built.legal)), sonames, needed libraries and rpaths ($(wc -l < /built.deps) files), but for ${seen} expected differences (scripts/compare-published.expected)."
+      echo "Same symlinks ($(wc -l < /built.links)), sonames, needed libraries and rpaths ($(wc -l < /built.deps) files), but for ${seen} expected differences (scripts/compare-published.expected)."
     fi
     exit "$status"
   '

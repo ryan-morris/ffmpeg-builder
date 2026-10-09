@@ -6,6 +6,7 @@ import { versionInCell } from '../choose.ts';
 import { depsOn, optionRecipe, optionsOf, type EngineData } from '../engine-data.ts';
 import { allowedBy } from '../licenses.ts';
 import type { LockedProfile } from '../lockfile.ts';
+import { packageVersion } from '../paths.ts';
 import type { Profile } from '../profile.ts';
 import { availability, type CellPlan } from '../resolve.ts';
 import type { LicenseFile } from '../schema/engine.ts';
@@ -172,24 +173,32 @@ function setupOf(data: EngineData, platform: string): string {
 }
 
 /**
- * A patch set the target names: its folder's name, a hash of its patches for this FFmpeg major, those patches (in name
- * order, applied in that order) and its licence texts.
+ * A patch set the target names: its folder's name, its licence (about.yml), a hash of its patches for this FFmpeg
+ * major, those patches (in name order, applied in that order) and its licence texts.
  */
-export interface PlannedPatchSet { name: string; sha256: string; files: { name: string; text: string }[]; licenses: { path: string; text: string }[] }
+export interface PlannedPatchSet { name: string; license: string; sha256: string; files: { name: string; text: string }[]; licenses: { path: string; text: string }[] }
+
+/** Where the build's definition came from: the repository URL and commit (`-dirty` when it had local changes). */
+export interface BuildSource { repo?: string; ref?: string }
 
 export interface BuildPlan {
   platform: string;
   setup: string; // platforms/setup/<setup>.sh
+  image: string; // platforms.yml image: the toolchain image's folder, or macos
+  toolchain: string; // the toolchain identity: part of every library's cache key
+  engine: string; // the ffmpeg-build version that made the plan
   name: string;
   target: string; // the target (or profile variant) this build is
   license: License;
   release?: string; // the release tag it ships in; none for a build outside a release
-  sourcesArchive: string; // the release's sources archive, named in legal/SOURCE_OFFER.txt
-  libraries: { name: string; version: string; key: string; cached: boolean; source: Source; licenseFiles: LicenseFile[] }[];
+  repository?: string; // owner/repo the release is published in
+  sourcesArchive: string; // the release's sources archive
+  libraries: { name: string; version: string; license: string; key: string; cached: boolean; source: Source; licenseFiles: LicenseFile[] }[];
   runtime: string[]; // globs under DEPS_DIR that ship next to FFmpeg's libraries (e.g. lib/libvulkan.so*)
-  ships: { file: string; notice: string }[]; // platform files the archives carry, with their notice's path in the toolchain
+  ships: { file: string; license: string; notice: string }[]; // platform files the archives carry, with their notice's path in the toolchain
   patches: PlannedPatchSet[];
-  legal: { label: string; governing: string[]; notice: string }; // legal/: FFmpeg's texts to copy, LICENSE-NOTICE.txt
+  // THIRD-PARTY-NOTICES.txt: the governing COPYING texts of FFmpeg to include, and the sections the plan can write
+  notices: { governing: string[]; header: string; build: string; source: string };
   ffmpeg: { version: string; archives: string[]; configure: string[]; verify: string[] };
 }
 
@@ -213,11 +222,11 @@ export const GOVERNING_TEXTS: Record<License, string[]> = {
 const V2_OF: Partial<Record<License, License>> = { lgplv3: 'lgplv2', gplv3: 'gplv2' };
 
 /**
- * legal/LICENSE-NOTICE.txt: the effective licence, and why. A v3 build names the libraries whose own licence the
- * version 2 licence doesn't allow (the Apache-2.0 parts); a v2 build names its TLS member (or says it has none);
- * a nonfree build names what makes it nonfree.
+ * The effective licence, and why (what upstream's LICENSE-NOTICE.txt said). A v3 build names the libraries whose own
+ * licence the version 2 licence doesn't allow (the Apache-2.0 parts); a v2 build names its TLS member (or says it has
+ * none); a nonfree build says it isn't redistributable and names what makes it nonfree.
  */
-export function licenseNotice(data: EngineData, cell: CellPlan, target: string): string {
+export function licenseNotice(data: EngineData, cell: CellPlan): string {
   const license = cell.cell.license;
   const spdx = (r: string) => data.recipes.get(r)!.license;
   const allows = (r: string, l: License) => {
@@ -236,11 +245,9 @@ export function licenseNotice(data: EngineData, cell: CellPlan, target: string):
       : `TLS is the operating system's ${tls} backend, which bundles no library.`;
   const governing = GOVERNING_TEXTS[license];
   const lines = [
-    `FFmpeg ${cell.cell.version} — ${cell.cell.platform} (${target})`,
-    '',
     `EFFECTIVE LICENSE:  ${LICENSE_LABEL[license]} (${LICENSE_NAME[license]})`,
     '',
-    `Governing license text: ${governing[0]}${governing[1] ? ` (plus ${governing[1]}, which it extends)` : ''}${license === 'nonfree' ? ', for FFmpeg\'s own code' : ''}`,
+    `Governing license text: ${governing[0]}${governing[1] ? ` (plus ${governing[1]}, which it extends)` : ''}${license === 'nonfree' ? ', for FFmpeg\'s own code' : ''}; in full under FFMPEG below.`,
     '',
   ];
   const list = (rs: string[]) => rs.map((r) => `  ${r} (${spdx(r)})`);
@@ -253,7 +260,6 @@ export function licenseNotice(data: EngineData, cell: CellPlan, target: string):
       'incompatible with the GPL, so it may not be distributed to anyone. It is for internal use only.',
       ...(parts.length ? ['The libraries that make it nonfree:', ...list(parts)] : ['None of its libraries makes it nonfree; FFmpeg\'s own nonfree code does.']),
       tlsLine,
-      '',
     );
   } else if (v2) {
     const parts = cell.recipes.filter((r) => allows(r, license) && !allows(r, v2));
@@ -262,19 +268,92 @@ export function licenseNotice(data: EngineData, cell: CellPlan, target: string):
         ? ['This build uses --enable-version3 because it links libraries (the Apache-2.0 parts) whose licences are', 'compatible with version 3 of the (L)GPL but not with version 2.1/2:', ...list(parts), 'Its effective license is therefore version 3.']
         : ['This build uses --enable-version3, though none of its libraries needs it.']),
       tlsLine,
-      '',
     );
   } else {
-    lines.push(`This is a version 2 build: it doesn't use --enable-version3 and links no library that needs version 3.`, tlsLine, '');
+    lines.push(`This is a version 2 build: it doesn't use --enable-version3 and links no library that needs version 3.`, tlsLine);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/** The top of THIRD-PARTY-NOTICES.txt: what this is, its effective licence and why, and FFmpeg's modifications. */
+export function noticesHeader(a: { version: string; target: string; platform: string; engine: string; licence: string; patches: readonly PlannedPatchSet[] }): string {
+  const lines = [`FFmpeg ${a.version} — ${a.target} (${a.platform}), built by ffmpeg-build ${a.engine}`, '', a.licence.trimEnd(), ''];
+  if (a.patches.length) {
+    lines.push(
+      'FFmpeg was modified by these patch sets (applied to its source before it was configured; see PATCH SETS below):',
+      ...a.patches.map((p) => `  ${p.name}: ${p.files.length} patch${p.files.length === 1 ? '' : 'es'} (${p.files.map((f) => f.name).join(', ') || 'none for this FFmpeg version'}), sha256 ${p.sha256}`),
+      '',
+    );
   }
   lines.push(
-    'Bundled third-party libraries: each one\'s own license text is in licenses/<library>/ in this directory;',
-    'that attribution travels with the binary as required.',
-    '',
-    'Corresponding source: see SOURCE_OFFER.txt in this directory.',
-    '',
+    'This file holds every licence and notice this build carries: FFmpeg\'s own texts first, then each bundled',
+    'library\'s, with where its source comes from. Sections: BUILD, SOURCE, FFMPEG, COMPONENTS, then PATCH SETS and',
+    'FILES THE PLATFORM SHIPS when the build has them. Each opens with a rule of = signs, its title in capitals and a',
+    'rule (a licence text may hold a rule of its own); each component with "== <name> <version> ==", each text with',
+    '"--- <file> ---".',
   );
-  return lines.join('\n');
+  return `${lines.join('\n')}\n`;
+}
+
+/** The BUILD section, but for FFmpeg's configure line, which the driver reads from what it built. */
+export function noticesBuild(a: { platform: string; setup: string; image: string; toolchain: string }): string {
+  const where = a.image === 'macos' ? 'natively on macOS with Xcode' : `in the toolchain image images/${a.image}`;
+  return [
+    `Platform: ${a.platform}, built ${where}, set up by platforms/setup/${a.setup}.sh`,
+    `Toolchain identity: ${a.toolchain}`,
+    '  (a hash of the toolchain, the build driver and the platform\'s setup scripts; part of every library\'s cache key)',
+    '',
+  ].join('\n');
+}
+
+/** A repository URL at a commit, as a link where the host has one (GitHub's /tree/<commit>). */
+function atCommit(repo: string, ref: string): string {
+  const commit = ref.replace(/-dirty$/, '');
+  const link = /^https:\/\/github\.com\/[^/]+\/[^/]+$/.test(repo) ? `${repo}/tree/${commit}` : `${repo} at commit ${commit}`;
+  return ref.endsWith('-dirty') ? `${link}\n  (built with local changes to that commit, so it isn't the whole build definition)` : link;
+}
+
+/**
+ * The SOURCE section: where the complete corresponding source is, all of it public. Never an offer to send it on
+ * request: a release names its sources archive by URL; an unreleased build says where its source is recorded and that
+ * it must be published with that archive before it is distributed.
+ */
+export function noticesSource(a: { name: string; version: string; license: License; release?: string; repository?: string; sourcesArchive: string; source: BuildSource; ffmpegTarball: string }): string {
+  const lines: string[] = [];
+  if (a.release && a.repository) {
+    lines.push(
+      'Complete corresponding source, as required by the licences above:',
+      `  https://github.com/${a.repository}/releases/download/${a.release}/${a.sourcesArchive}`,
+      `This archive, published with release ${a.release}, holds the complete corresponding source for this build: FFmpeg's`,
+      'release tarball, every library at the exact version (and commit) it was built from, the patches applied, and the',
+      'build scripts and toolchain definitions (ffmpeg-build.yml, ffmpeg.lock, the engine\'s recipes, platform scripts and',
+      'toolchain image Dockerfiles).',
+    );
+  } else if (a.release) {
+    lines.push(
+      `Complete corresponding source: ${a.sourcesArchive}, published with release ${a.release}. It holds FFmpeg's release`,
+      'tarball, every library at the exact version (and commit) it was built from, the patches applied, and the build',
+      'scripts and toolchain definitions.',
+    );
+  } else {
+    lines.push(
+      'This build was not published in a release (a local or unreleased build). Its source is recorded in',
+      `${a.name}.sources.json beside it, every source with its sha256 (and commit), and kept in the build cache`,
+      `under sources/. It must be published together with its sources archive (${a.sourcesArchive}) before it is`,
+      'distributed.',
+    );
+  }
+  lines.push('');
+  lines.push(
+    `Build definition: ${a.source.repo && a.source.ref ? atCommit(a.source.repo, a.source.ref) : a.source.repo ?? 'not recorded (the build had no FFMPEG_BUILD_SOURCE_REPO and no git remote)'}`,
+    `FFmpeg ${a.version}, unmodified upstream: ${a.ffmpegTarball}`,
+    'Each component below names its upstream origin, exact version and commit, so it can also be fetched from upstream',
+    `directly. ${a.name}.sources.json lists every source with its sha256.`,
+    '',
+    'Everything is public; no request to the distributor is necessary to obtain it.',
+  );
+  if (a.license === 'nonfree') lines.push('', 'This is a nonfree build (--enable-nonfree): it is for internal use only and is not offered for redistribution.');
+  return `${lines.join('\n')}\n`;
 }
 
 /** The patch sets a profile names, read from their folders: about.yml (checked already), patches and licence texts. */
@@ -288,6 +367,7 @@ export function plannedPatches(profile: Profile, major: string): PlannedPatchSet
     const files = existsSync(patchDir) ? filesUnder(patchDir).filter((f) => /\.(patch|diff)$/.test(f)).sort() : [];
     return {
       name: basename(dir),
+      license: about.license,
       sha256: hash.digest('hex'),
       files: files.map((f) => ({ name: f, text: readFileSync(join(patchDir, f), 'utf8') })),
       licenses: about['license-files'].map((path) => ({ path, text: readFileSync(join(dir, path), 'utf8') })),
@@ -295,32 +375,52 @@ export function plannedPatches(profile: Profile, major: string): PlannedPatchSet
   });
 }
 
-export function makeBuildPlan(args: { profile: Profile; data: EngineData; locked: LockedProfile; cell: CellPlan; variant: string; imageId: string; cacheDir: string; depsDir?: string; name?: string; release?: string }): BuildPlan {
+export function makeBuildPlan(args: {
+  profile: Profile; data: EngineData; locked: LockedProfile; cell: CellPlan; variant: string; imageId: string; cacheDir: string;
+  depsDir?: string; name?: string; release?: string; repository?: string; group?: string; source?: BuildSource;
+}): BuildPlan {
   const { profile, data, locked, cell } = args;
   const versionOf = (recipe: string) => versionInCell(profile, data, locked, cell.cell, recipe)!;
   const keys = cacheKeys(data, cell.recipes, versionOf, cell.cell.platform, args.imageId);
   const version = cell.cell.version;
   const license = cell.cell.license;
+  const platform = cell.cell.platform;
+  const setup = setupOf(data, platform);
+  const image = data.platforms.get(platform)!.image;
+  const name = args.name ?? `ffmpeg-${version}-${platform}-${args.variant}`;
+  const sourcesArchive = `ffmpeg-${version}${args.group ? `-${args.group}` : ''}-sources.tar.gz`;
+  const archives = [data.ffmpegSource.url, ...data.ffmpegSource.mirrors].map((u) => expandTemplate(u, version));
+  const patches = plannedPatches(profile, cell.cell.major);
+  const engine = packageVersion();
   return {
-    platform: cell.cell.platform,
-    setup: setupOf(data, cell.cell.platform),
-    name: args.name ?? `ffmpeg-${version}-${cell.cell.platform}-${args.variant}`,
+    platform,
+    setup,
+    image,
+    toolchain: args.imageId,
+    engine,
+    name,
     target: args.variant,
     license,
     ...(args.release ? { release: args.release } : {}),
-    sourcesArchive: `ffmpeg-${version}-sources.tar.gz`,
-    libraries: cell.recipes.map((name) => {
-      const key = keys.get(name)!;
-      const licenseFiles = data.recipes.get(name)!['license-files'];
-      return { name, version: versionOf(name), key, cached: existsSync(join(args.cacheDir, `${key}.tar.gz`)), source: sourceOf(data, name, versionOf(name)), licenseFiles };
+    ...(args.repository ? { repository: args.repository } : {}),
+    sourcesArchive,
+    libraries: cell.recipes.map((lib) => {
+      const key = keys.get(lib)!;
+      const r = data.recipes.get(lib)!;
+      return { name: lib, version: versionOf(lib), license: r.license, key, cached: existsSync(join(args.cacheDir, `${key}.tar.gz`)), source: sourceOf(data, lib, versionOf(lib)), licenseFiles: r['license-files'] };
     }),
     runtime: unique(cell.recipes.flatMap((r) => data.recipes.get(r)!.runtime ?? [])),
-    ships: Object.entries(data.platforms.get(cell.cell.platform)?.ships ?? {}).map(([file, s]) => ({ file, notice: s.notice })),
-    patches: plannedPatches(profile, cell.cell.major),
-    legal: { label: LICENSE_LABEL[license], governing: GOVERNING_TEXTS[license], notice: licenseNotice(data, cell, args.variant) },
+    ships: Object.entries(data.platforms.get(platform)?.ships ?? {}).map(([file, s]) => ({ file, license: s.license, notice: s.notice })),
+    patches,
+    notices: {
+      governing: GOVERNING_TEXTS[license],
+      header: noticesHeader({ version, target: args.variant, platform, engine, licence: licenseNotice(data, cell), patches }),
+      build: noticesBuild({ platform, setup, image, toolchain: args.imageId }),
+      source: noticesSource({ name, version, license, ...(args.release ? { release: args.release } : {}), ...(args.repository ? { repository: args.repository } : {}), sourcesArchive, source: args.source ?? {}, ffmpegTarball: archives[0]! }),
+    },
     ffmpeg: {
       version,
-      archives: [data.ffmpegSource.url, ...data.ffmpegSource.mirrors].map((u) => expandTemplate(u, version)),
+      archives,
       configure: configureFlags(data, cell, args.depsDir),
       verify: verifyNames(data, cell),
     },

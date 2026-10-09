@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Compares an Android archive built by ffmpeg-build with a published one. Android libraries can't run on this host, so it
 # compares what can be read from the files, inside a clean manylinux_2_28 container (any host):
-#   - the files in the archive (legal/ aside), headers included, and the names of the files under legal/;
+#   - the files in the archive, headers included
+#     (one expected difference: published archives have legal/, ffmpeg-build THIRD-PARTY-NOTICES.txt);
 #   - FFmpeg's configure line as compiled into libavutil.so, apart from build-machine paths: --prefix, the --extra-*
 #     flags, and the NDK tool and sysroot paths (--cc, --cxx, --ar, --ranlib, --strip, --nm, --sysroot), and the
 #     published build's --enable-hwaccel=h264_mediacodec and hevc_mediacodec (FFmpeg has no such hwaccels: they
@@ -33,8 +34,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -e "EXPECTED=${expected}" \
     for side in built published; do
       mkdir -p "/$side"
       tar -xzf "/$side.tar.gz" -C "/$side"
-      (cd "/$side" && find . -mindepth 1 ! -path "./legal" ! -path "./legal/*" | sed "s|^\./||" | LC_ALL=C sort) > "/$side.files"
-      (cd "/$side" && find legal -type f | LC_ALL=C sort) > "/$side.legal"
+      (cd "/$side" && find . -mindepth 1 ! -path "./legal/*" | sed "s|^\./||" | LC_ALL=C sort) > "/$side.files"
       lib="$(find "/$side/lib" -name libavutil.so | head -1)"
       strings -a "$lib" | grep -E -- "--prefix=" | awk "{ if (length(\$0) > length(b)) b = \$0 } END { print b }" \
         | sed "s/ --/\n--/g" \
@@ -56,11 +56,10 @@ MSYS_NO_PATHCONV=1 docker run --rm -e "EXPECTED=${expected}" \
       if [ -s /d.bad ]; then echo "$2 differ (- published, + built):"; cat /d.bad; status=1; fi
     }
     compare files "Files" /published.files /built.files
-    compare legal "Files under legal/" /published.legal /built.legal
     compare flags "Configure flags" /published.flags /built.flags
     compare deps "Sonames and dependencies" /published.deps /built.deps
     if [ "$status" -eq 0 ]; then
-      echo "Same files, legal/ files, configure flags, sonames and dependencies ($(wc -l < /built.files) files, $(wc -l < /built.legal) under legal/, $(wc -l < /built.flags) flags, $(wc -l < /built.deps) libraries), but for ${seen} expected differences (scripts/compare-published.expected)."
+      echo "Same files, configure flags, sonames and dependencies ($(wc -l < /built.files) files, $(wc -l < /built.flags) flags, $(wc -l < /built.deps) libraries), but for ${seen} expected differences (scripts/compare-published.expected)."
     fi
     exit "$status"
   '

@@ -185,3 +185,18 @@ maccatalyst-arm64 binaries +libswresample arm64 platform 6
 maccatalyst-arm64 binaries +libswscale arm64 platform 6
 maccatalyst-arm64 symbols -libavutil: _av_vk_get_optional_device_extensions
 maccatalyst-arm64 symbols -libavutil: _av_vk_get_optional_instance_extensions
+
+# Licence texts: upstream's archives carry a legal/ folder; ffmpeg-build carries one THIRD-PARTY-NOTICES.txt at the
+# root instead (the owner's decision, docs/specs/2026-10-08-release-design.md, 6a). Frameworks: what sits beside them.
+osx-arm64 files -legal
+osx-arm64 files +THIRD-PARTY-NOTICES.txt
+osx-x64 files -legal
+osx-x64 files +THIRD-PARTY-NOTICES.txt
+ios-arm64 root -legal
+ios-arm64 root +THIRD-PARTY-NOTICES.txt
+ios-sim-arm64 root -legal
+ios-sim-arm64 root +THIRD-PARTY-NOTICES.txt
+maccatalyst-arm64 root -legal
+maccatalyst-arm64 root +THIRD-PARTY-NOTICES.txt
+maccatalyst-x64 root -legal
+maccatalyst-x64 root +THIRD-PARTY-NOTICES.txt

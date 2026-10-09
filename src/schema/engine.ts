@@ -89,7 +89,7 @@ export const recipeSchema = z.strictObject({
   name,
   provides: name.optional(), // the FFmpeg option this library is for; checked against ffmpeg/<major>.yml
   license: text, // SPDX expression; checked against profile licenses in a later step
-  // the licence texts the archives carry under legal/licenses/<name>/; a build fails when one is missing
+  // the licence texts the archives carry in THIRD-PARTY-NOTICES.txt; a build fails when one is missing
   'license-files': z.array(licenseFile, { error: 'expected a list of licence files, like [COPYING]' }).min(1, { error: 'name at least one licence file' }),
   configure: z.array(text).default([]),
   needs: z.array(dep).default([]),
@@ -122,7 +122,7 @@ export const platformsSchema = z.strictObject({
       runner: text.optional(), // the CI runner it builds on (default ubuntu-24.04)
       configure: z.array(text).optional(),
       // files the archives carry besides FFmpeg's and the recipes': name -> its SPDX licence and its notice file, a path
-      // in the toolchain where ${VAR} is a variable of the platform's setup (copied to legal/licenses/<name>/)
+      // in the toolchain where ${VAR} is a variable of the platform's setup (its text goes into THIRD-PARTY-NOTICES.txt)
       ships: z.record(text, z.strictObject({ license: text, notice: text }, { error: 'expected { license: <SPDX>, notice: <path of its licence text> }' })).optional(),
     }),
   ),

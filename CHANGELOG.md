@@ -12,6 +12,8 @@ The first public version.
 - `build --target` for linux-x64, linux-arm64, linux-armhf, linux-musl-x64, linux-musl-arm64, win-x64, win-arm64,
   android-arm64, android-x64, and on a Mac osx-arm64, osx-x64, ios-arm64, ios-sim-arm64, maccatalyst-arm64 and
   maccatalyst-x64, reproducing devenvy/ffmpeg's published builds.
-- `legal/` in every archive, kept sources and `<name>.sources.json`.
+- `THIRD-PARTY-NOTICES.txt` at the root of every archive (FFmpeg's texts and the effective license, the configure
+  line, where the source is, every library's licence files), kept sources and `<name>.sources.json`. It replaces the
+  `legal/` folder devenvy/ffmpeg's archives had.
 - `releases`, `fetch`, and reusable `build`, `update` and `fetch-update` workflows (preview).
 - `migrate` for folders of the earlier matrix profiles.

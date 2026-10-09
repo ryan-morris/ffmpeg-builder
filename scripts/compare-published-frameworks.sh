@@ -5,8 +5,8 @@
 #   - each framework's configure line (the FFmpeg configuration string compiled into it), apart from build-machine
 #     paths and the --extra-*flags/--cc/--sysroot values that name them;
 #   - each binary's architecture and platform (LC_BUILD_VERSION), and its direct exported symbols;
-#   - the names of the files under legal/ against the published archive's legal/ (which serves every slice, so
-#     expected differences are listed per build, <platform>-<license>).
+#   - what sits beside the frameworks at the top of the archives (the published archive has legal/ where
+#     ffmpeg-build ships THIRD-PARTY-NOTICES.txt: one expected difference).
 #
 #   scripts/compare-published-frameworks.sh dist/ffmpeg-9.0.2-ios-arm64-lgplv3.tar.gz published/ffmpeg-9.0.2-ios-lgplv3.tar.gz ios-arm64
 #
@@ -58,8 +58,8 @@ describe() { # <framework folder root> <out prefix> [architecture to read a fat 
   LC_ALL=C sort -o "$2.flags" "$2.flags"
   LC_ALL=C sort -o "$2.symbols" "$2.symbols"
 }
-(cd "${tmp}/built" && { find legal -type f 2>/dev/null || true; } | LC_ALL=C sort) >"${tmp}/b.legal"
-(cd "${tmp}/pubx" && { find legal -type f 2>/dev/null || true; } | LC_ALL=C sort) >"${tmp}/p.legal"
+(cd "${tmp}/built" && find . -mindepth 1 -maxdepth 1 ! -name '*.framework' | sed 's|^\./||' | LC_ALL=C sort) >"${tmp}/b.root"
+(cd "${tmp}/pubx" && find . -mindepth 1 -maxdepth 1 ! -name '*.xcframework' | sed 's|^\./||' | LC_ALL=C sort) >"${tmp}/p.root"
 describe "${tmp}/built" "${tmp}/b"
 describe "${tmp}/published" "${tmp}/p" "$(lipo -archs "$(ls "${tmp}"/built/*.framework/libavutil)")"
 status=0
@@ -84,7 +84,7 @@ compare() { # <section> <label> <published file> <built file>
   fi
 }
 compare files "Framework files" "${tmp}/p.files" "${tmp}/b.files"
-compare legal "Files under legal/" "${tmp}/p.legal" "${tmp}/b.legal"
+compare root "Beside the frameworks" "${tmp}/p.root" "${tmp}/b.root"
 compare flags "Configure flags" "${tmp}/p.flags" "${tmp}/b.flags"
 compare binaries "Binaries" "${tmp}/p.binaries" "${tmp}/b.binaries"
 compare symbols "Exported symbols" "${tmp}/p.symbols" "${tmp}/b.symbols"
@@ -93,5 +93,5 @@ if [ -n "${stale}" ]; then
   echo "warning: expected differences for ${platform} that this comparison didn't meet (stale?):"
   printf '  %s\n' "${stale}"
 fi
-[ "${status}" -eq 0 ] && echo "Same frameworks, files, legal/ files, configure flags, architectures/platforms and exported symbols ($(wc -l <"${tmp}/b.symbols" | tr -d ' ') symbols), but for ${seen} expected differences (scripts/compare-published-apple.expected)."
+[ "${status}" -eq 0 ] && echo "Same frameworks, files, configure flags, architectures/platforms and exported symbols ($(wc -l <"${tmp}/b.symbols" | tr -d ' ') symbols), but for ${seen} expected differences (scripts/compare-published-apple.expected)."
 exit "${status}"

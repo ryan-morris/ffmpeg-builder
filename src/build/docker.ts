@@ -82,15 +82,13 @@ export function hostUserOf(platform = process.platform): { uid: number; gid: num
 }
 
 /**
- * The docker run that builds one plan: --init so Ctrl-C reaches the build (a bash pid 1 ignores it). `env` passes
- * variables into the container (the source repository and commit legal/SOURCE_OFFER.txt names).
+ * The docker run that builds one plan: --init so Ctrl-C reaches the build (a bash pid 1 ignores it). On Linux the
+ * driver gives what it wrote back to the host user (Docker Desktop maps ownership itself).
  */
-export function dockerRunArgs(m: { tag: string; recipes: string; engine: string; cache: string; out: string; plan: string; env?: Record<string, string>; hostUser?: { uid: number; gid: number } }): string[] {
-  const { tag, env = {}, hostUser = hostUserOf(), ...mounts } = m;
-  // the driver gives what it wrote back to this user (Linux hosts; Docker Desktop maps ownership itself)
-  const owner = hostUser ? { FFB_HOST_UID: String(hostUser.uid), FFB_HOST_GID: String(hostUser.gid) } : {};
-  const envArgs = Object.entries({ ...env, ...owner }).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
-  return ['run', '--rm', '--init', ...envArgs, ...mountArgs(mounts), tag, 'bash', '/engine/driver.sh'];
+export function dockerRunArgs(m: { tag: string; recipes: string; engine: string; cache: string; out: string; plan: string; hostUser?: { uid: number; gid: number } }): string[] {
+  const { tag, hostUser = hostUserOf(), ...mounts } = m;
+  const owner = hostUser ? ['-e', `FFB_HOST_UID=${hostUser.uid}`, '-e', `FFB_HOST_GID=${hostUser.gid}`] : [];
+  return ['run', '--rm', '--init', ...owner, ...mountArgs(mounts), tag, 'bash', '/engine/driver.sh'];
 }
 
 /**
