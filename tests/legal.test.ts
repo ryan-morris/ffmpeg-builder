@@ -145,7 +145,8 @@ describe("THIRD-PARTY-NOTICES.txt's effective licence", () => {
     const text = licenseNotice(data, cell);
     expect(text).toContain('EFFECTIVE LICENSE:  nonfree (not redistributable: configured with --enable-nonfree)');
     expect(text).toContain("Governing license text: COPYING.GPLv3, for FFmpeg's own code");
-    expect(text).toContain('This build is NOT REDISTRIBUTABLE. It uses --enable-nonfree: it combines FFmpeg with code whose licence is\nincompatible with the GPL, so it may not be distributed to anyone. It is for internal use only.\n');
+    // nothing in the dvr fixture needs --enable-nonfree: it is nonfree because its target says so
+    expect(text).toContain('This build is NOT REDISTRIBUTABLE. It is configured with --enable-nonfree because it was asked to be\n(license: nonfree), though nothing in it needs that. It is for internal use only.\n');
     // no version paragraph: nonfree is neither v3 nor v2
     expect(text).not.toMatch(/version3|version 3|version 2/);
   });
@@ -160,9 +161,29 @@ describe("THIRD-PARTY-NOTICES.txt's effective licence", () => {
     const p = parseProfileText('name: t\nffmpeg: 9\nplatforms: [linux-x64]\nlicense: nonfree\nwith: [libfdk-aac, dav1d]\n', 't.yml');
     if (!p.ok) throw new Error(p.errors.join('\n'));
     const text = licenseNotice(data, planProfile(p.profile, data, { '9': '9.0.0' }).cells[0]!);
+    expect(text).toContain('It uses --enable-nonfree: it combines FFmpeg with code whose licence is\nincompatible with the GPL, so it may not be distributed to anyone.');
     expect(text).toContain('The libraries that make it nonfree:\n  fdk-aac (FDK-AAC)\n');
     expect(text).not.toContain('dav1d (');
     expect(text).not.toContain('compatible with version 3');
+  });
+
+  it('says a nonfree build is nonfree by choice when nothing in it needs --enable-nonfree, and names nonfree FFmpeg options', () => {
+    const data = loadEngineData(writeEngine({
+      'ffmpeg/9.yml': 'major: 9\nreleases: [9.0.0]\noptions:\n  cuda-nvcc: { builtin: true, ffmpeg-license: nonfree }\n  dav1d: { needs: dav1d }\n',
+      'licenses.yml': 'licenses:\n  BSD-2-Clause: all\n',
+      'recipes/dav1d/recipe.yml': "name: dav1d\nlicense: BSD-2-Clause\nsource: { git: https://example.com/dav1d }\nversions: { git-tags: '^(.*)$' }\nplatforms: all\n",
+    }));
+    const notice = (w: string) => {
+      const p = parseProfileText(`name: t\nffmpeg: 9\nplatforms: [linux-x64]\nlicense: nonfree\nwith: [${w}]\n`, 't.yml');
+      if (!p.ok) throw new Error(p.errors.join('\n'));
+      return licenseNotice(data, planProfile(p.profile, data, { '9': '9.0.0' }).cells[0]!);
+    };
+    const chosen = notice('dav1d');
+    expect(chosen).toContain('This build is NOT REDISTRIBUTABLE. It is configured with --enable-nonfree because it was asked to be\n(license: nonfree), though nothing in it needs that. It is for internal use only.\n');
+    expect(chosen).not.toContain("FFmpeg's own nonfree code");
+    expect(chosen).not.toContain('incompatible with the GPL');
+    const option = notice('dav1d, cuda-nvcc');
+    expect(option).toContain('The FFmpeg options that make it nonfree:\n  cuda-nvcc\n');
   });
 
   it('says a build that could have had TLS has none, without claiming none is allowed', () => {

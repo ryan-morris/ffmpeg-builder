@@ -256,10 +256,21 @@ export function licenseNotice(data: EngineData, cell: CellPlan): string {
   if (license === 'nonfree') {
     // no version paragraph: a nonfree build isn't under any version of the (L)GPL as a whole
     const parts = cell.recipes.filter((r) => !allows(r, 'gplv3'));
+    // FFmpeg's own options that configure only accepts with --enable-nonfree (no library of their own)
+    const all = optionsOf(data, cell.cell.major);
+    const nonfreeOptions = cell.options.filter((o) => all.get(o)?.builtin && all.get(o)?.ffmpegLicense === 'nonfree');
     lines.push(
-      'This build is NOT REDISTRIBUTABLE. It uses --enable-nonfree: it combines FFmpeg with code whose licence is',
-      'incompatible with the GPL, so it may not be distributed to anyone. It is for internal use only.',
-      ...(parts.length ? ['The libraries that make it nonfree:', ...list(parts)] : ['None of its libraries makes it nonfree; FFmpeg\'s own nonfree code does.']),
+      ...(parts.length || nonfreeOptions.length
+        ? [
+          'This build is NOT REDISTRIBUTABLE. It uses --enable-nonfree: it combines FFmpeg with code whose licence is',
+          'incompatible with the GPL, so it may not be distributed to anyone. It is for internal use only.',
+          ...(parts.length ? ['The libraries that make it nonfree:', ...list(parts)] : []),
+          ...(nonfreeOptions.length ? ['The FFmpeg options that make it nonfree:', ...nonfreeOptions.map((o) => `  ${o}`)] : []),
+        ]
+        : [
+          'This build is NOT REDISTRIBUTABLE. It is configured with --enable-nonfree because it was asked to be',
+          '(license: nonfree), though nothing in it needs that. It is for internal use only.',
+        ]),
       tlsLine,
     );
   } else if (v2) {
