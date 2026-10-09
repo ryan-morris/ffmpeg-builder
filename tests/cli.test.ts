@@ -57,6 +57,15 @@ describe('ffmpeg-build check', () => {
 });
 
 describe('a folder of old matrix profiles', () => {
+  it("doesn't take other YAML for one: a platforms.yml, or a compose file with a name", () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ffmpeg-build-not-old-'));
+    writeFileSync(join(dir, 'platforms.yml'), 'platforms:\n  linux-x64: { image: linux-x64, setup: linux }\n');
+    writeFileSync(join(dir, 'compose.yml'), 'name: media\nservices:\n  web:\n    image: nginx\n');
+    const r = runCli(['check'], { cwd: dir, env });
+    expect(r.exitCode).toBe(2);
+    expect(r.stdout).toContain('no ffmpeg-build.yml here: start one with `ffmpeg-build init`');
+  });
+
   it('every command points at migrate, and changes nothing', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ffmpeg-build-old-'));
     copyDvr(dir);

@@ -76,7 +76,6 @@ problem (the message says which).
 - [Building](docs/building.md): toolchains, caching, `legal/`, what a build was made from
 - [Releases, CI and products](docs/releases.md): release tags, workflows, `fetch`
 - [The guide](AGENTS.md) (`ffmpeg-build guide`): the commands in the order you'd use them
-- Design: [the original handoff](docs/design/handoff.md) and the [specs](docs/specs)
 
 ## Development
 

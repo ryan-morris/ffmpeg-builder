@@ -17,4 +17,4 @@ engine's recipes and platform scripts). Everything is public; no request to the
 distributor is necessary to obtain it.
 
 Each library's own license text accompanies this notice under
-legal/licenses/<library>/, alongside the governing license text for this build.
+legal/licenses/<library>/, alongside the governing license text for this build.@INTERNAL@

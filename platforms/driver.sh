@@ -11,7 +11,7 @@
 # hooks before_ffmpeg (just before FFmpeg's configure; it may add host-specific flags to `flags`), stage (lay out
 # the archives) and check_stage.
 #
-# Legal files and sources (docs/specs/2026-10-08-release-design.md, 6a): each library's declared licence
+# Legal files and sources (docs/building.md): each library's declared licence
 # files are copied into its install tree (share/ffmpeg-build/legal/<recipe>/), with a record of its source
 # (share/ffmpeg-build/sources/<recipe>.json), so a library from the cache brings both. Every fetched source is kept
 # in the cache under sources/, never overwritten. Both archives get legal/, and <name>.sources.json lists what the
@@ -65,19 +65,37 @@ clone_commit() {
 
 sha256() { sha256sum "$1" | cut -d' ' -f1; }
 
-# keep_source <path under sources/> <file>: a copy of a fetched source in the cache, written once (a temp name, then
-# one rename) and never replaced. A tarball is its own identity, so one that differs from the kept copy of the same
-# name is an error: upstream changed a released file.
+# place_once <temp file> <kept file>: the temp file becomes the kept one unless that is already there (another build
+# sharing the cache kept it first): a kept source is never replaced. The temp file is gone either way.
+place_once() {
+  mv -n "$1" "$2" 2>/dev/null || true
+  rm -f "$1"
+}
+
+# keep_source <path under sources/> <file>: a copy of a fetched source in the cache, written once and never replaced.
+# A tarball is its own identity, so a download that differs from the kept copy of the same name is an error:
+# upstream changed a released file.
 keep_source() {
   local final="${SOURCES}/$1" tmp
-  if [ -f "${final}" ]; then
-    [ "$(sha256 "${final}")" = "$(sha256 "$2")" ] && return 0
-    echo "ERROR: the download of $1 differs from the copy the cache kept earlier (sha256 $(sha256 "${final}")); if upstream really replaced it, delete sources/$1 from the cache folder and build again" >&2
-    return 1
+  if [ ! -f "${final}" ]; then
+    mkdir -p "${final%/*}" || return 1
+    tmp="$(mktemp "${final}.tmp.XXXXXX")" || return 1
+    cp "$2" "${tmp}" || { rm -f "${tmp}"; return 1; }
+    place_once "${tmp}" "${final}"
   fi
-  mkdir -p "${final%/*}" || return 1
-  tmp="$(mktemp "${final}.tmp.XXXXXX")" || return 1
-  cp "$2" "${tmp}" && mv -f "${tmp}" "${final}"
+  [ "$(sha256 "${final}")" = "$(sha256 "$2")" ] && return 0
+  echo "ERROR: the download of $1 differs from the copy the cache kept earlier (sha256 $(sha256 "${final}")); if upstream really replaced it, delete sources/$1 and the library entries built from it (simplest: the whole libs/ folder) from the cache folder, and build again" >&2
+  return 1
+}
+
+# no_attributes <checkout>: git archive writes the tree as checked out, not as its .gitattributes would export it
+# (export-ignore drops files, export-subst rewrites them). $GIT_DIR/info/attributes outranks every .gitattributes;
+# attr.tree would do it too, but needs git 2.40 and the armhf image has 2.39.
+no_attributes() {
+  local dir
+  dir="$(git -C "$1" rev-parse --absolute-git-dir)" || return 1
+  mkdir -p "${dir}/info"
+  grep -qxF '* -export-ignore -export-subst' "${dir}/info/attributes" 2>/dev/null || printf '%s\n' '* -export-ignore -export-subst' >>"${dir}/info/attributes"
 }
 
 # fetch_archive <dest> <keep under> <url...>: the first url that downloads and unpacks, without its top folder. The
@@ -138,23 +156,26 @@ fetch_source() {
 
 # keep_git <source dir> <name>: a git checkout as built, kept as sources/<name>/<name>-<commit>.tar.gz: `git archive`
 # of its exact commit, with every git checkout inside it (submodules, and repositories a recipe cloned, like
-# shaderc's third_party) at its own commit. Its name holds the commit, so an existing copy is kept as it is (git
-# versions differ in the bytes they write for the same commit). Sets KEPT and KEPT_COMMIT.
+# shaderc's third_party) at its own commit, every file as checked out (no_attributes). Its name holds the commit, so
+# an existing copy is kept as it is: git versions differ in the bytes they write for the same commit, and the record
+# takes its sha256 from the copy in place. Sets KEPT and KEPT_COMMIT.
 keep_git() {
   local src="$1" name="$2" commit rel tar="${WORK}/keep.tar" part="${WORK}/keep-part.tar" tmp
   commit="$(git -C "${src}" rev-parse HEAD)"
   KEPT="${name}/${name}-${commit}.tar.gz"
   KEPT_COMMIT="${commit}"
   [ -f "${SOURCES}/${KEPT}" ] && return 0
+  no_attributes "${src}"
   git -C "${src}" archive --format=tar --prefix="${name}-${commit}/" HEAD >"${tar}"
   while IFS= read -r rel; do
+    no_attributes "${src}/${rel}"
     git -C "${src}/${rel}" archive --format=tar --prefix="${name}-${commit}/${rel}/" HEAD >"${part}"
     tar -Af "${tar}" "${part}"
   done < <(cd "${src}" && find . \( -path ./.git -prune \) -o \( -name .git -prune -printf '%h\n' \) | sed 's|^\./||' | LC_ALL=C sort)
   mkdir -p "${SOURCES}/${name}"
   tmp="$(mktemp "${SOURCES}/${KEPT}.tmp.XXXXXX")"
   gzip -n -c "${tar}" >"${tmp}"
-  mv -f "${tmp}" "${SOURCES}/${KEPT}"
+  place_once "${tmp}" "${SOURCES}/${KEPT}"
   rm -f "${tar}" "${part}"
 }
 
@@ -186,22 +207,9 @@ source_record() {
     '{name: $name, version: $version, origin: $url, file: $file, sha256: $sha} + (if $commit == "" then {} else {commit: $commit} end)'
 }
 
-# expand_vars <text>: ${NAME} replaced by that variable of the platform's setup (an unset one is an error)
-expand_vars() {
-  local rest="$1" out="" var
-  while [[ "${rest}" =~ ^([^$]*)\$\{([A-Za-z_][A-Za-z0-9_]*)\}(.*)$ ]]; do
-    var="${BASH_REMATCH[2]}"
-    [ -n "${!var:-}" ] || { echo "ERROR: ${var} isn't set by platforms/setup/${SETUP}.sh, but platforms.yml names it in $1" >&2; return 1; }
-    out+="${BASH_REMATCH[1]}${!var}"
-    rest="${BASH_REMATCH[3]}"
-  done
-  printf '%s' "${out}${rest}"
-}
-
-# fill_template <file>: @KEY@ replaced by the variable OFFER_KEY (values may span lines)
-fill_template() {
-  awk '{ while (match($0, /@[A-Z_]+@/)) { k = substr($0, RSTART + 1, RLENGTH - 2); $0 = substr($0, 1, RSTART - 1) ENVIRON["OFFER_" k] substr($0, RSTART + RLENGTH) } print }' "$1"
-}
+# expand_vars and fill_template
+# shellcheck source=/dev/null
+source "${ENGINE}/legal/helpers.sh"
 
 # write_legal <legal folder>: upstream's 10_write_legal.sh, from the plan. FFmpeg's LICENSE.md and CREDITS, the
 # COPYING texts that govern the build's licence, licenses/<recipe>/ from each library's install tree,
@@ -243,7 +251,14 @@ write_legal() {
   OFFER_FFMPEG_VERSION="$(jq -r .ffmpeg.version "${PLAN}")"
   OFFER_LICENSE="$(jq -r .legal.label "${PLAN}")"
   OFFER_GNU="GNU ${OFFER_LICENSE}"
-  [ "${OFFER_LICENSE}" = nonfree ] && OFFER_GNU="GNU GPLv3, which governs FFmpeg's own code"
+  OFFER_INTERNAL=""
+  if [ "${OFFER_LICENSE}" = nonfree ]; then
+    OFFER_GNU="GNU GPLv3, which governs FFmpeg's own code"
+    OFFER_INTERNAL="
+
+This is a nonfree build (--enable-nonfree): it is for internal use only and is not
+offered for redistribution, to anyone."
+  fi
   OFFER_PLATFORM="${RID}"
   OFFER_TARGET="$(jq -r .target "${PLAN}")"
   OFFER_REPO="${FFMPEG_BUILD_SOURCE_REPO:-the public build repository this artifact was produced from}"
@@ -257,7 +272,7 @@ was published with it. The sources it was built from are listed, with their
 sha256, in ${NAME}.sources.json beside it; a release of it carries them in
 ${sources}."
   fi
-  export OFFER_FFMPEG_VERSION OFFER_LICENSE OFFER_GNU OFFER_PLATFORM OFFER_TARGET OFFER_REPO OFFER_RELEASE
+  export OFFER_FFMPEG_VERSION OFFER_LICENSE OFFER_GNU OFFER_INTERNAL OFFER_PLATFORM OFFER_TARGET OFFER_REPO OFFER_RELEASE
   fill_template "${ENGINE}/legal/SOURCE_OFFER.txt" >"${legal}/SOURCE_OFFER.txt"
 }
 
@@ -277,16 +292,23 @@ for ((i = 0; i < count; i++)); do
   key="$(jq -r .key <<<"${lib}")"
   cached="${CACHE}/libs/${key}.tar.gz"
   record="${FFB_SHARE}/sources/${name}.json"
+  recorded="" kept=""
   if [ -f "${cached}" ]; then
-    # a cache entry counts only with its source record and the kept source it names (entries from before sources
-    # were kept have neither): never ship a library whose source isn't on file
-    if kept="$(tar -xzf "${cached}" -O "${record}" 2>/dev/null | jq -r '.file // empty')" && [ -n "${kept}" ] && [ -f "${SOURCES}/${kept}" ]; then
+    # a cache entry counts only with its source record and the kept source it names, unchanged since (entries from
+    # before sources were kept have neither): never ship a library whose source isn't on file
+    if recorded="$(tar -xzf "${cached}" -O "${record}" 2>/dev/null)" && kept="$(jq -r '.file // empty' <<<"${recorded}")" \
+      && [ -n "${kept}" ] && [ -f "${SOURCES}/${kept}" ] && [ "$(sha256 "${SOURCES}/${kept}")" = "$(jq -r '.sha256 // empty' <<<"${recorded}")" ]; then
       step "${name} ${version}: from cache"
       tar -xzf "${cached}" -C "${DEPS_DIR}" || { echo "ERROR: the cache entry for ${name} ${version} is unreadable; delete ${cached#"${CACHE}"/} from the cache folder and build again" >&2; exit 1; }
       jq -c '. + {cached: true}' "${DEPS_DIR}/${record}" >>"${WORK}/sources.jsonl"
       continue
     fi
-    echo "  ${name} ${version}: the cache entry's source isn't on file under sources/; building it again"
+    echo "  ${name} ${version}: the cache entry's source isn't on file under sources/ as recorded; building it again"
+    # a kept git archive that no longer matches its record is written again from the new checkout (a tarball isn't:
+    # the download is checked against it, and a difference stops the build)
+    if [ -n "${kept:-}" ] && [ -f "${SOURCES}/${kept}" ] && [ -n "$(jq -r '.commit // empty' <<<"${recorded}")" ]; then
+      rm -f "${SOURCES}/${kept}"
+    fi
   fi
   step "${name} ${version}: building"
   src="${WORK}/src/${name}"
@@ -331,6 +353,20 @@ step "FFmpeg ${ff_version}"
 mapfile -t urls < <(jq -r '.ffmpeg.archives[]' "${PLAN}")
 fetch_archive "${WORK}/ffmpeg" ffmpeg "${urls[@]}" || { echo "ERROR: could not download FFmpeg ${ff_version}" >&2; exit 1; }
 ff_record="$(source_record ffmpeg "${ff_version}" "${KEPT}" "${KEPT_FROM}")"
+
+# the target's patch sets in order, each set's patches in name order. git apply works outside a repository; the ceiling
+# keeps it from finding one the work folder happens to be inside, which would shift where the paths land
+n_sets="$(jq '.patches | length' "${PLAN}")"
+for ((i = 0; i < n_sets; i++)); do
+  set_name="$(jq -r ".patches[${i}].name" "${PLAN}")"
+  for ((j = 0; j < $(jq ".patches[${i}].files | length" "${PLAN}"); j++)); do
+    patch_name="$(jq -r ".patches[${i}].files[${j}].name" "${PLAN}")"
+    jq -j ".patches[${i}].files[${j}].text" "${PLAN}" >"${WORK}/patch.diff"
+    step "patch ${set_name}/${patch_name}"
+    GIT_CEILING_DIRECTORIES="$(dirname "${WORK}")" git -C "${WORK}/ffmpeg" apply --whitespace=nowarn -p1 "${WORK}/patch.diff" \
+      || { echo "ERROR: patches/${set_name}: ${patch_name} doesn't apply to FFmpeg ${ff_version}; update it for this version" >&2; exit 1; }
+  done
+done
 mapfile -t flags < <(jq -r '.ffmpeg.configure[]' "${PLAN}")
 before_ffmpeg
 cd "${WORK}/ffmpeg"

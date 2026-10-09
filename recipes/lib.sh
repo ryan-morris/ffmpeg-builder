@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Helpers for recipes/<name>/build.sh. Sourced (with set -euo pipefail already on) before each recipe, inside
 # the toolchain image. A recipe runs from $SRC_DIR and installs into $DEPS_DIR; see
-# docs/specs/2026-10-08-build-linux-design.md for every variable it gets.
+# CONTRIBUTING.md and platforms/driver.sh for every variable it gets.
 
 # Cross-compilation arguments; empty for native builds (linux-x64).
 CMAKE_CROSS_ARGS=()

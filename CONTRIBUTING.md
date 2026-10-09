@@ -26,7 +26,7 @@ fails when it is stale).
 | `licenses.yml` | which build licenses each SPDX licence may go into |
 | `profiles/devenvy.yml` | the shipped targets that `init` starts from |
 | `scripts/compare-published*.sh` | compare a build with a published devenvy/ffmpeg archive |
-| `docs/specs/` | design decisions, one per feature |
+| `docs/` | the user documentation (targets, building, releases) |
 
 ## Changes that need more than tests
 
@@ -36,8 +36,8 @@ fails when it is stale).
   reason.
 - **A new library** needs its recipe's `license-files:` (the licence texts in its source, which `legal/` ships) and its
   SPDX licence in `recipe.yml`; `check` and the licence table do the rest.
-- **The `ffmpeg-build.yml` format** is a public interface: change it with a spec in `docs/specs/` and a `migrate` path
-  if existing folders would break.
+- **The `ffmpeg-build.yml` format** is a public interface: describe the change in an issue first, and give it a
+  `migrate` path if existing folders would break.
 
 ## Style
 

@@ -65,6 +65,9 @@ function lay(): void {
   write(join(T, 'srcs', 'alpha-1.0', 'README'), 'alpha\n');
   write(join(T, 'repos', 'beta', 'LICENSE.md'), 'beta license\n');
   write(join(T, 'repos', 'beta', 'beta.c'), 'int beta;\n');
+  write(join(T, 'repos', 'beta', 'version.h'), '#define REV "$Format:%H$"\n');
+  // what git archive would leave out or rewrite, and the kept source must not
+  write(join(T, 'repos', 'beta', '.gitattributes'), 'beta.c export-ignore\nversion.h export-subst\n');
   write(join(T, 'repos', 'nested', 'N.txt'), 'nested\n');
   const ff = join(T, 'srcs', 'ffmpeg-9.0.0');
   write(join(ff, 'configure'), '#!/usr/bin/env bash\nfor a; do case "$a" in --prefix=*) echo "${a#--prefix=}" >.prefix ;; esac; done\nmkdir -p ffbuild\necho CONFIG_FAKE=yes >ffbuild/config.mak\necho "#define FFMPEG_CONFIGURATION \\"$*\\"" >config.h\n');
@@ -81,8 +84,11 @@ const ALPHA: Lib = { name: 'alpha', source: { archives: ['file:///nowhere/alpha-
 const BETA: Lib = { name: 'beta', source: { git: '$T/repos/beta', ref: 'main' }, licenseFiles: [{ path: 'LICENSE.md' }, { path: 'LICENSE', recipe: true }] };
 const GAMMA: Lib = { name: 'gamma', source: { git: '$T/repos/beta', ref: 'main' }, licenseFiles: [{ path: 'COPYING' }] };
 
+// a patch to FFmpeg's CREDITS, which legal/ ships: proof in the archive that patches are applied before the build
+const CREDITS_PATCH = { name: '0001-credits.patch', text: '--- a/CREDITS\n+++ b/CREDITS\n@@ -1 +1 @@\n-FFmpeg CREDITS\n+FFmpeg CREDITS, patched by acme\n' };
+
 /** Runs the driver on a plan for `license` (and `libs`); its exit code and log. */
-function drive(license: License, libs: Lib[] = [ALPHA, BETA], release?: string): { code: number; log: string; name: string } {
+function drive(license: License, libs: Lib[] = [ALPHA, BETA], release?: string, patches = [CREDITS_PATCH]): { code: number; log: string; name: string } {
   const name = `ffmpeg-9.0.0-fake-${license}`;
   const at = (s: string) => s.replaceAll('$T', sh(T));
   const plan = {
@@ -91,7 +97,7 @@ function drive(license: License, libs: Lib[] = [ALPHA, BETA], release?: string):
     libraries: libs.map((l) => ({ name: l.name, version: '1.0', key: `${l.name}-key`, cached: false, source: JSON.parse(at(JSON.stringify(l.source))), licenseFiles: l.licenseFiles })),
     runtime: [],
     ships: [{ file: 'libfoo.so', notice: '${FAKE_TOOLCHAIN}/NOTICE' }],
-    patches: [{ name: 'acme', sha256: 'ab'.repeat(32), licenses: [{ path: 'LICENSE', text: 'Acme licence\n' }] }],
+    patches: [{ name: 'acme', sha256: 'ab'.repeat(32), files: patches, licenses: [{ path: 'LICENSE', text: 'Acme licence\n' }] }],
     legal: { label: license, governing: GOVERNING_TEXTS[license], notice: `notice for ${license}\n` },
     ffmpeg: { version: '9.0.0', archives: [at('file://$T/dl/ffmpeg-9.0.0.tar.gz')], configure: [], verify: [] },
   };
@@ -115,12 +121,41 @@ const listing = (archive: string) => bash(`tar -tzf "$T/out/${archive}" | sed 's
 const fileIn = (archive: string, path: string) => bash(`tar -xzOf "$T/out/${archive}" "./${path}"`);
 const sources = (name: string) => JSON.parse(readFileSync(join(T, 'out', `${name}.sources.json`), 'utf8'));
 
+describe.skipIf(!hasTools)('fill_template (platforms/legal/helpers.sh)', () => {
+  const fill = (template: string, env: Record<string, string>) => {
+    const dir = mkdtempSync(join(tmpdir(), 'ffmpeg-build-fill-'));
+    writeFileSync(join(dir, 't.txt'), template);
+    return execFileSync('bash', ['-c', `source "${sh(join(packageRoot, 'platforms', 'legal', 'helpers.sh'))}"; fill_template "${sh(join(dir, 't.txt'))}"`], { encoding: 'utf8', env: { ...process.env, ...env }, timeout: 10_000 });
+  };
+
+  it("never reads what a value brought in again (a value holding @KEY@ can't loop)", () => {
+    expect(fill('repo: @REPO@ (@REF@)\n', { OFFER_REPO: 'https://h/@REPO@/@REF@', OFFER_REF: 'abc' })).toBe('repo: https://h/@REPO@/@REF@ (abc)\n');
+  });
+
+  it('keeps an @...@ it has no value for, and the text around it', () => {
+    expect(fill('mail x@USER@y or @REPO@\n', { OFFER_REPO: 'r' })).toBe('mail x@USER@y or r\n');
+    expect(fill('@A@@B@\n', { OFFER_A: 'one\ntwo', OFFER_B: '' })).toBe('one\ntwo\n');
+  });
+});
+
 describe.skipIf(!hasTools)('the driver: legal files and sources', () => {
   let first: ReturnType<typeof drive>;
   beforeAll(() => {
     lay();
     first = drive('lgplv3');
   }, 120_000);
+
+  it("applies the target's patches to FFmpeg's source before building", () => {
+    expect(first.log).toContain('patch acme/0001-credits.patch');
+    expect(fileIn(`${first.name}.tar.gz`, 'legal/CREDITS')).toBe('FFmpeg CREDITS, patched by acme\n');
+  });
+
+  it("stops, naming the patch, when one doesn't apply", () => {
+    const stale = { name: '0002-stale.patch', text: '--- a/CREDITS\n+++ b/CREDITS\n@@ -1 +1 @@\n-something else\n+x\n' };
+    const r = drive('lgplv3', [ALPHA, BETA], undefined, [stale]);
+    expect(r.code).toBe(1);
+    expect(r.log).toContain("ERROR: patches/acme: 0002-stale.patch doesn't apply to FFmpeg 9.0.0; update it for this version");
+  });
 
   it('builds, and puts legal/ in both archives', () => {
     expect(first.code, first.log).toBe(0);
@@ -163,6 +198,8 @@ describe.skipIf(!hasTools)('the driver: legal files and sources', () => {
     expect(sha256(join(T, 'cache', 'sources', beta.file))).toBe(beta.sha256);
     const kept = bash(`tar -tzf "$T/cache/sources/${beta.file}" | LC_ALL=C sort`).trim().split('\n');
     expect(kept).toEqual(expect.arrayContaining([`beta-${commit}/LICENSE.md`, `beta-${commit}/beta.c`, `beta-${commit}/third_party/nested/N.txt`]));
+    // as checked out: .gitattributes' export-ignore and export-subst don't apply
+    expect(bash(`tar -xzOf "$T/cache/sources/${beta.file}" "beta-${commit}/version.h"`)).toBe('#define REV "$Format:%H$"\n');
   });
 
   it("puts each library's licence files and source record in its cache entry", () => {
@@ -180,15 +217,31 @@ describe.skipIf(!hasTools)('the driver: legal files and sources', () => {
       expect(files).toEqual(expect.arrayContaining(['legal/licenses/alpha/COPYING', 'legal/licenses/beta/LICENSE.md', 'legal/licenses/beta/LICENSE']));
       expect(sources(r.name).libraries.map((l: { cached: boolean }) => l.cached)).toEqual([true, true]);
       expect(sources(r.name).release).toBe('acme-9.0.0.4');
-      expect(fileIn(`${r.name}.tar.gz`, 'legal/SOURCE_OFFER.txt')).toContain('It ships in release acme-9.0.0.4. That release\'s sources archive, ffmpeg-9.0.0-sources.tar.gz,');
+      const offer = fileIn(`${r.name}.tar.gz`, 'legal/SOURCE_OFFER.txt');
+      expect(offer).toContain('It ships in release acme-9.0.0.4. That release\'s sources archive, ffmpeg-9.0.0-sources.tar.gz,');
+      // a nonfree build says it isn't offered to anyone
+      expect(offer.includes('is for internal use only and is not\noffered for redistribution'), license).toBe(license === 'nonfree');
+      expect(offer.endsWith('alongside the governing license text for this build.\n'), license).toBe(license !== 'nonfree');
     }
   }, 300_000);
+
+  it('rebuilds a cached library whose kept source no longer matches its record, and keeps it again', () => {
+    const beta = sources(first.name).libraries[1];
+    writeFileSync(join(T, 'cache', 'sources', beta.file), 'not the archive');
+    const r = drive('lgplv3');
+    expect(r.code, r.log).toBe(0);
+    expect(r.log).toContain("beta 1.0: the cache entry's source isn't on file under sources/ as recorded; building it again");
+    expect(r.log).toContain('alpha 1.0: from cache');
+    const again = sources(r.name).libraries[1];
+    expect(again).toMatchObject({ file: beta.file, cached: false });
+    expect(sha256(join(T, 'cache', 'sources', beta.file))).toBe(again.sha256);
+  }, 60_000);
 
   it('rebuilds a cached library whose kept source is gone', () => {
     rmSync(join(T, 'cache', 'sources', 'alpha'), { recursive: true });
     const r = drive('lgplv3');
     expect(r.code, r.log).toBe(0);
-    expect(r.log).toContain("alpha 1.0: the cache entry's source isn't on file under sources/; building it again");
+    expect(r.log).toContain("alpha 1.0: the cache entry's source isn't on file under sources/ as recorded; building it again");
     expect(r.log).toContain('beta 1.0: from cache');
     expect(existsSync(join(T, 'cache', 'sources', 'alpha', 'alpha-1.0.tar.gz'))).toBe(true);
     expect(sources(r.name).libraries.map((l: { cached: boolean }) => l.cached)).toEqual([false, true]);

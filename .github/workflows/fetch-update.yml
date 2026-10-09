@@ -36,10 +36,10 @@ jobs:
       BRANCH: ffmpeg-build/fetch-update
       PIN: ${{ inputs.pin-file }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           token: ${{ secrets.token || github.token }}
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
       - run: npm install --global "ffmpeg-build@${{ inputs.engine }}"

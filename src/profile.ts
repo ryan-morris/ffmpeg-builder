@@ -48,7 +48,8 @@ const START_REMOVED =
 export function looksLikeProfileFile(path: string): boolean {
   try {
     const raw = parseYaml(readFileSync(path, 'utf8'), path);
-    return typeof raw === 'object' && raw !== null && !Array.isArray(raw) && PROFILE_MARKERS.some((key) => key in (raw as object));
+    // ffmpeg: plus a license or platforms list: a platforms.yml, or a compose file with a name:, is something else
+    return typeof raw === 'object' && raw !== null && !Array.isArray(raw) && 'ffmpeg' in raw && ('license' in raw || 'platforms' in raw);
   } catch {
     return true; // unreadable YAML may well be a broken profile: let the command say what is wrong
   }

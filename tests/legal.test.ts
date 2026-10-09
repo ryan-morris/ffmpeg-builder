@@ -10,7 +10,7 @@ import { GOVERNING_TEXTS, licenseNotice, makeBuildPlan, plannedPatches } from '.
 import { publicRepoUrl, sourceIdentity } from '../src/commands/build.ts';
 import { EngineDataError, loadEngineData } from '../src/engine-data.ts';
 import type { LockedProfile } from '../src/lockfile.ts';
-import { loadProfile } from '../src/profile.ts';
+import { loadProfile, parseProfileText } from '../src/profile.ts';
 import { packageRoot } from '../src/paths.ts';
 import { planProfile } from '../src/resolve.ts';
 import { parseFolderText, targetProfile } from '../src/targets.ts';
@@ -92,14 +92,17 @@ describe("the plan's legal data", () => {
     expect(plan().ships).toEqual([]);
   });
 
-  it('reads the patch sets: a hash of their patches for the FFmpeg major, and their licence texts', () => {
+  it('reads the patch sets: their patches for the FFmpeg major, a hash of them, and their licence texts', () => {
     const [acme] = plan().patches;
-    expect(acme).toEqual({ name: 'acme-muxer', sha256: expect.stringMatching(/^[0-9a-f]{64}$/), licenses: [{ path: 'LICENSE', text: readFileSync(join(fixtureProfilesDir, 'patches', 'acme-muxer', 'LICENSE'), 'utf8') }] });
+    expect(acme).toEqual({ name: 'acme-muxer', sha256: expect.stringMatching(/^[0-9a-f]{64}$/), files: [], licenses: [{ path: 'LICENSE', text: readFileSync(join(fixtureProfilesDir, 'patches', 'acme-muxer', 'LICENSE'), 'utf8') }] });
     const before = acme!.sha256;
     const dir = mkdtempSync(join(tmpdir(), 'ffmpeg-build-patchset-'));
     execFileSync(process.execPath, ['-e', `require('fs').cpSync(${JSON.stringify(join(fixtureProfilesDir, 'patches'))}, ${JSON.stringify(join(dir, 'patches'))}, { recursive: true })`]);
     writeFileSync(join(dir, 'patches', 'acme-muxer', '9', '0001-more.patch'), 'diff\n');
-    expect(plannedPatches({ ...dvr, dir }, '9')[0]!.sha256).not.toBe(before);
+    const more = plannedPatches({ ...dvr, dir }, '9')[0]!;
+    expect(more.sha256).not.toBe(before);
+    // the patches themselves travel in the plan, in name order (the README beside them doesn't)
+    expect(more.files).toEqual([{ name: '0001-more.patch', text: 'diff\n' }]);
   });
 
   it('lists the notice of what a platform ships', () => {
@@ -140,7 +143,32 @@ describe('LICENSE-NOTICE.txt', () => {
     const text = licenseNotice(data, cell, 'dvr');
     expect(text).toContain('EFFECTIVE LICENSE:  nonfree (not redistributable: configured with --enable-nonfree)');
     expect(text).toContain("Governing license text: COPYING.GPLv3, for FFmpeg's own code");
-    expect(text).toContain('This build uses --enable-nonfree, so it may not be redistributed.');
+    expect(text).toContain('This build is NOT REDISTRIBUTABLE. It uses --enable-nonfree: it combines FFmpeg with code whose licence is\nincompatible with the GPL, so it may not be distributed to anyone. It is for internal use only.\n');
+    // no version paragraph: nonfree is neither v3 nor v2
+    expect(text).not.toMatch(/version3|version 3|version 2/);
+  });
+
+  it('names what makes a nonfree build nonfree', () => {
+    const data = loadEngineData(writeEngine({
+      'ffmpeg/9.yml': 'major: 9\nreleases: [9.0.0]\noptions:\n  libfdk-aac: { needs: fdk-aac, ffmpeg-license: nonfree }\n  dav1d: { needs: dav1d }\n',
+      'licenses.yml': 'licenses:\n  BSD-2-Clause: all\n  FDK-AAC: [nonfree]\n',
+      'recipes/fdk-aac/recipe.yml': "name: fdk-aac\nlicense: FDK-AAC\nsource: { git: https://example.com/fdk }\nversions: { git-tags: '^v(.*)$' }\nplatforms: all\n",
+      'recipes/dav1d/recipe.yml': "name: dav1d\nlicense: BSD-2-Clause\nsource: { git: https://example.com/dav1d }\nversions: { git-tags: '^(.*)$' }\nplatforms: all\n",
+    }));
+    const p = parseProfileText('name: t\nffmpeg: 9\nplatforms: [linux-x64]\nlicense: nonfree\nwith: [libfdk-aac, dav1d]\n', 't.yml');
+    if (!p.ok) throw new Error(p.errors.join('\n'));
+    const text = licenseNotice(data, planProfile(p.profile, data, { '9': '9.0.0' }).cells[0]!, 't');
+    expect(text).toContain('The libraries that make it nonfree:\n  fdk-aac (FDK-AAC)\n');
+    expect(text).not.toContain('dav1d (');
+    expect(text).not.toContain('compatible with version 3');
+  });
+
+  it('says a build that could have had TLS has none, without claiming none is allowed', () => {
+    const t = folder.targets.find((x) => x.name === 'linux-x64-lgplv3')!;
+    const profile = { ...targetProfile(folder, t), with: targetProfile(folder, t).with.filter((w) => w.name !== 'openssl') };
+    const cell = planProfile(profile, shipped, { '9': '9.0.2' }).cells[0]!;
+    expect(cell.groups.tls).toBeUndefined();
+    expect(licenseNotice(shipped, cell, 't')).toContain('\nThis build has no TLS library.\n');
   });
 });
 
@@ -161,6 +189,16 @@ describe('the source repository SOURCE_OFFER.txt names', () => {
     g('add', '-A');
     g('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'one');
     expect(sourceIdentity(dir, {})).toEqual({ FFMPEG_BUILD_SOURCE_REPO: 'https://github.com/acme/media', FFMPEG_BUILD_SOURCE_REF: g('rev-parse', 'HEAD') });
+    // a change to a tracked file marks the commit -dirty; the build's own untracked output doesn't
+    writeFileSync(join(dir, 'dist.tar.gz'), 'x');
+    expect(sourceIdentity(dir, {}).FFMPEG_BUILD_SOURCE_REF).toBe(g('rev-parse', 'HEAD'));
+    writeFileSync(join(dir, 'ffmpeg-build.yml'), 'targets: { a: { platform: linux-x64, license: lgplv3, ffmpeg: "9" } }\n');
+    expect(sourceIdentity(dir, {}).FFMPEG_BUILD_SOURCE_REF).toBe(`${g('rev-parse', 'HEAD')}-dirty`);
+    // a remote that is a folder on this machine is no repository a reader can open: the fallback wording
+    g('remote', 'set-url', 'origin', dir);
+    expect(sourceIdentity(dir, {})).not.toHaveProperty('FFMPEG_BUILD_SOURCE_REPO');
+    g('remote', 'set-url', 'origin', 'file:///srv/git/media.git');
+    expect(sourceIdentity(dir, {})).not.toHaveProperty('FFMPEG_BUILD_SOURCE_REPO');
     expect(publicRepoUrl('git@github.com:acme/media.git')).toBe('https://github.com/acme/media');
     expect(publicRepoUrl('ssh://git@example.com/acme/media.git')).toBe('ssh://example.com/acme/media');
   });

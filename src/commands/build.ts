@@ -29,20 +29,32 @@ export function publicRepoUrl(url: string): string {
   }
 }
 
+/** Whether a git remote is something a reader can fetch: a URL (scheme://) or scp-style host:path, not a local path. */
+function isRemoteUrl(remote: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(remote) ? !/^file:/i.test(remote) : /^[\w.-]+@[\w.-]+:(?!\/)/.test(remote);
+}
+
 /**
  * The repository and commit legal/SOURCE_OFFER.txt names: FFMPEG_BUILD_SOURCE_REPO / _REF (CI sets them), else the
- * folder's git remote (origin) and HEAD when it is a git checkout. Missing ones are left out (the offer then says so).
+ * folder's git remote (origin, when it is a URL rather than a local path) and HEAD, with -dirty when tracked files
+ * have changes HEAD doesn't hold. Missing ones are left out (the offer then uses its fallback wording).
  */
 export function sourceIdentity(dir: string, env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const git = (args: string[]): string | undefined => {
     try {
-      return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000 }).trim() || undefined;
+      return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000 }).trim();
     } catch {
       return undefined;
     }
   };
-  const repo = env.FFMPEG_BUILD_SOURCE_REPO || git(['remote', 'get-url', 'origin']);
-  const ref = env.FFMPEG_BUILD_SOURCE_REF || git(['rev-parse', 'HEAD']);
+  const remote = env.FFMPEG_BUILD_SOURCE_REPO ? undefined : git(['remote', 'get-url', 'origin']);
+  const repo = env.FFMPEG_BUILD_SOURCE_REPO || (remote && isRemoteUrl(remote) ? remote : undefined);
+  let ref = env.FFMPEG_BUILD_SOURCE_REF || undefined;
+  if (!ref) {
+    const head = git(['rev-parse', 'HEAD']);
+    // tracked files only: the build's own output (dist/) is usually untracked
+    if (head) ref = git(['status', '--porcelain', '--untracked-files=no']) ? `${head}-dirty` : head;
+  }
   return { ...(repo ? { FFMPEG_BUILD_SOURCE_REPO: publicRepoUrl(repo) } : {}), ...(ref ? { FFMPEG_BUILD_SOURCE_REF: ref } : {}) };
 }
 

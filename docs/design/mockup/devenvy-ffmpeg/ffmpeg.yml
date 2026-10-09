@@ -1,9 +1,0 @@
-# Everything devenvy/ffmpeg publishes.
-name: devenvy
-ffmpeg: [8, 9]
-platforms: all
-license: [gplv3, gplv2, lgplv3, lgplv2]
-start: everything
-
-pin:
-  nvenc: "13.0"          # NVIDIA driver 570+: still runs on GTX 900/10-series (driver 580 is their last)

@@ -7,7 +7,7 @@ import { depsOn, optionRecipe, optionsOf, type EngineData } from '../engine-data
 import { allowedBy } from '../licenses.ts';
 import type { LockedProfile } from '../lockfile.ts';
 import type { Profile } from '../profile.ts';
-import type { CellPlan } from '../resolve.ts';
+import { availability, type CellPlan } from '../resolve.ts';
 import type { LicenseFile } from '../schema/engine.ts';
 import type { License } from '../schema/profile.ts';
 import { unique } from '../text.ts';
@@ -98,11 +98,20 @@ function filesUnder(dir: string, prefix = ''): string[] {
     .flatMap((d) => (d.isDirectory() ? filesUnder(join(dir, d.name), `${prefix}${d.name}/`) : [`${prefix}${d.name}`]));
 }
 
-/** A hash of every file in recipes/<name>/ plus recipes/lib.sh (missing lib.sh counts as empty). */
-export function recipeFilesHash(root: string, recipe: string): string {
+/**
+ * A hash of every file in recipes/<name>/ plus recipes/lib.sh (missing lib.sh counts as empty). `withoutLicenses`
+ * leaves out what only says which licence texts it ships (recipe.yml's license-files and the texts kept beside it),
+ * which can't change what a library that builds against it gets.
+ */
+export function recipeFilesHash(root: string, recipe: string, withoutLicenses?: readonly LicenseFile[]): string {
   const hash = createHash('sha256');
   const dir = join(root, 'recipes', recipe);
-  for (const file of filesUnder(dir)) hash.update(`${file}\0`).update(readFileSync(join(dir, file))).update('\0');
+  const beside = new Set((withoutLicenses ?? []).filter((f) => f.recipe).map((f) => f.path));
+  for (const file of filesUnder(dir).filter((f) => !beside.has(f))) {
+    let content: string | Buffer = readFileSync(join(dir, file));
+    if (withoutLicenses && file === 'recipe.yml') content = content.toString('utf8').replace(/^license-files:.*(?:\r?\n[ \t]+-.*)*(?:\r?\n|$)/m, '');
+    hash.update(`${file}\0`).update(content).update('\0');
+  }
   const lib = join(root, 'recipes', 'lib.sh');
   hash.update('lib.sh\0').update(existsSync(lib) ? readFileSync(lib) : '');
   return hash.digest('hex');
@@ -134,23 +143,26 @@ export function toolchainIdentity(engineRoot: string, imageId: string, setup: st
 
 /**
  * One key per library: its facts, its files, the toolchain, and the keys of the libraries it builds against
- * (`needs`, plus any `uses` member that is in this build), so a changed dependency rebuilds its dependents.
+ * (`needs`, plus any `uses` member that is in this build), so a changed dependency rebuilds its dependents. What a
+ * dependent counts of a dependency leaves out the dependency's licence files: changing which texts a library ships
+ * rebuilds that library only.
  */
 export function cacheKeys(data: EngineData, recipes: readonly string[], versionOf: (recipe: string) => string, platform: string, toolchain: string): Map<string, string> {
-  const keys = new Map<string, string>();
+  const ids = new Map<string, { key: string; asDependency: string }>();
   const inBuild = new Set(recipes);
-  const keyOf = (recipe: string): string => {
-    const known = keys.get(recipe);
+  const sha = (fact: object) => createHash('sha256').update(JSON.stringify(fact)).digest('hex');
+  const idOf = (recipe: string): { key: string; asDependency: string } => {
+    const known = ids.get(recipe);
     if (known) return known;
     const r = data.recipes.get(recipe)!;
-    const against = [...depsOn(r, 'needs', platform), ...depsOn(r, 'uses', platform).filter((n) => inBuild.has(n))].map(keyOf);
-    const fact = JSON.stringify({ recipe, version: versionOf(recipe), platform, toolchain, files: recipeFilesHash(data.root, recipe), against });
-    const key = createHash('sha256').update(fact).digest('hex');
-    keys.set(recipe, key);
-    return key;
+    const against = [...depsOn(r, 'needs', platform), ...depsOn(r, 'uses', platform).filter((n) => inBuild.has(n))].map((n) => idOf(n).asDependency);
+    const fact = { recipe, version: versionOf(recipe), platform, toolchain, against };
+    const id = { key: sha({ ...fact, files: recipeFilesHash(data.root, recipe) }), asDependency: sha({ ...fact, files: recipeFilesHash(data.root, recipe, r['license-files']) }) };
+    ids.set(recipe, id);
+    return id;
   };
-  recipes.forEach(keyOf);
-  return keys;
+  recipes.forEach(idOf);
+  return new Map(recipes.map((r) => [r, ids.get(r)!.key]));
 }
 
 function setupOf(data: EngineData, platform: string): string {
@@ -159,8 +171,11 @@ function setupOf(data: EngineData, platform: string): string {
   return entry.setup;
 }
 
-/** A patch set the target names: its folder's name, a hash of its patches for this FFmpeg major, its licence texts. */
-export interface PlannedPatchSet { name: string; sha256: string; licenses: { path: string; text: string }[] }
+/**
+ * A patch set the target names: its folder's name, a hash of its patches for this FFmpeg major, those patches (in name
+ * order, applied in that order) and its licence texts.
+ */
+export interface PlannedPatchSet { name: string; sha256: string; files: { name: string; text: string }[]; licenses: { path: string; text: string }[] }
 
 export interface BuildPlan {
   platform: string;
@@ -195,7 +210,7 @@ export const GOVERNING_TEXTS: Record<License, string[]> = {
   nonfree: ['COPYING.GPLv3'],
 };
 // the version 2 licence a v3 build would otherwise be: what its libraries are measured against
-const V2_OF: Partial<Record<License, License>> = { lgplv3: 'lgplv2', gplv3: 'gplv2', nonfree: 'gplv2' };
+const V2_OF: Partial<Record<License, License>> = { lgplv3: 'lgplv2', gplv3: 'gplv2' };
 
 /**
  * legal/LICENSE-NOTICE.txt: the effective licence, and why. A v3 build names the libraries whose own licence the
@@ -210,8 +225,12 @@ export function licenseNotice(data: EngineData, cell: CellPlan, target: string):
     return 'allowed' in verdict && verdict.allowed.includes(l);
   };
   const tls = cell.groups.tls;
+  // with none chosen: whether any TLS option was open to this build, or none is under this licence and platform
+  const tlsOpen = [...optionsOf(data, cell.cell.major).values()].some((o) => o.group === 'tls' && !availability(data, cell.cell, o.name));
   const tlsLine = !tls
-    ? `This build has no TLS: no TLS library ${LICENSE_LABEL[license]} allows is available for ${cell.cell.platform}.`
+    ? tlsOpen
+      ? 'This build has no TLS library.'
+      : `This build has no TLS: no TLS library ${LICENSE_LABEL[license]} allows is available for ${cell.cell.platform}.`
     : data.recipes.has(tls)
       ? `TLS is ${tls} (${spdx(tls)}).`
       : `TLS is the operating system's ${tls} backend, which bundles no library.`;
@@ -225,16 +244,18 @@ export function licenseNotice(data: EngineData, cell: CellPlan, target: string):
     '',
   ];
   const list = (rs: string[]) => rs.map((r) => `  ${r} (${spdx(r)})`);
+  const v2 = V2_OF[license];
   if (license === 'nonfree') {
+    // no version paragraph: a nonfree build isn't under any version of the (L)GPL as a whole
     const parts = cell.recipes.filter((r) => !allows(r, 'gplv3'));
     lines.push(
-      'This build uses --enable-nonfree, so it may not be redistributed.',
-      ...(parts.length ? ['It links libraries whose licences no GPL build allows:', ...list(parts)] : ['None of its libraries needs it; FFmpeg\'s nonfree code does.']),
+      'This build is NOT REDISTRIBUTABLE. It uses --enable-nonfree: it combines FFmpeg with code whose licence is',
+      'incompatible with the GPL, so it may not be distributed to anyone. It is for internal use only.',
+      ...(parts.length ? ['The libraries that make it nonfree:', ...list(parts)] : ['None of its libraries makes it nonfree; FFmpeg\'s own nonfree code does.']),
+      tlsLine,
       '',
     );
-  }
-  const v2 = V2_OF[license];
-  if (v2) {
+  } else if (v2) {
     const parts = cell.recipes.filter((r) => allows(r, license) && !allows(r, v2));
     lines.push(
       ...(parts.length
@@ -264,9 +285,11 @@ export function plannedPatches(profile: Profile, major: string): PlannedPatchSet
     const hash = createHash('sha256');
     const patchDir = join(dir, major);
     if (existsSync(patchDir)) for (const file of filesUnder(patchDir)) hash.update(`${file}\0`).update(readFileSync(join(patchDir, file))).update('\0');
+    const files = existsSync(patchDir) ? filesUnder(patchDir).filter((f) => /\.(patch|diff)$/.test(f)).sort() : [];
     return {
       name: basename(dir),
       sha256: hash.digest('hex'),
+      files: files.map((f) => ({ name: f, text: readFileSync(join(patchDir, f), 'utf8') })),
       licenses: about['license-files'].map((path) => ({ path, text: readFileSync(join(dir, path), 'utf8') })),
     };
   });

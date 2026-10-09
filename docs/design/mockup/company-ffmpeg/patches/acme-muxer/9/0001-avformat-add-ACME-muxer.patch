@@ -1,6 +1,0 @@
-From 3b1e0c0de0000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-Subject: [PATCH 1/2] avformat: add ACME muxer
-
-(placeholder for a real `git format-patch` against FFmpeg n9.0.x, as written by
-`ffmpeg-build patches export`: adds libavformat/acmeenc.c and registers it in
-libavformat/allformats.c and libavformat/Makefile)

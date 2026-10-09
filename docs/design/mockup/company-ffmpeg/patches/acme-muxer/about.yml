@@ -1,7 +1,0 @@
-# Describes this patch set, so the CLI can check it and the source bundle can include it.
-name: acme-muxer
-license: proprietary             # our code, not LGPL: profiles using it must be `license: nonfree`
-                                 # (an LGPL-compatible license here would allow lgplv2/lgplv3 too)
-ffmpeg: [9]                      # one folder per supported major; `update` reports when a new
-                                 # major has no folder yet
-configure: [--enable-muxer=acme, --enable-demuxer=acme]

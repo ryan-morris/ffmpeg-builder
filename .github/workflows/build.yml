@@ -39,8 +39,8 @@ jobs:
       apple: ${{ steps.plan.outputs.apple }}
       engine: ${{ steps.engine.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
       - id: engine
@@ -89,10 +89,10 @@ jobs:
       FFMPEG_BUILD_SOURCE_REF: ${{ github.sha }}
       FFMPEG_BUILD_RELEASE: ${{ matrix.release }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           token: ${{ secrets.token || github.token }}
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
       - name: engine
@@ -106,11 +106,11 @@ jobs:
         run: sed 's/#.*//' "$(npm root --global)/ffmpeg-build/platforms/setup/apple-brew.txt" | xargs brew install
       - name: buildx with the Actions cache
         if: runner.os == 'Linux'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: expose the Actions cache to buildx
         if: runner.os == 'Linux'
-        uses: crazy-max/ghaction-github-runtime@v3
-      - uses: actions/cache@v4
+        uses: crazy-max/ghaction-github-runtime@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/ffmpeg-build
           key: ${{ matrix.cacheKey }}
@@ -118,7 +118,7 @@ jobs:
       - name: build ${{ matrix.target }}
         working-directory: ${{ inputs.folder }}
         run: ffmpeg-build build --target "${{ matrix.target }}" --out "${{ runner.temp }}/dist"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: dist-${{ matrix.release }}-${{ matrix.target }}
           path: ${{ runner.temp }}/dist
@@ -134,8 +134,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
       - name: engine
@@ -144,14 +144,14 @@ jobs:
         run: |
           # "source": this repository is the engine (its own test builds); otherwise the npm package
           if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v7
         with:
           pattern: dist-${{ matrix.release }}-*
           path: ${{ runner.temp }}/dist
           merge-multiple: true
       - working-directory: ${{ inputs.folder }}
         run: ffmpeg-build bundle --apple --release "${{ matrix.release }}" --dist "${{ runner.temp }}/dist"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ios-${{ matrix.release }}
           path: ${{ runner.temp }}/dist/ffmpeg-*-ios-*.tar.gz
@@ -174,8 +174,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ matrix.release }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
       - name: engine
@@ -184,7 +184,7 @@ jobs:
         run: |
           # "source": this repository is the engine (its own test builds); otherwise the npm package
           if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v7
         with:
           pattern: '{dist,ios}-${{ matrix.release }}*'
           path: ${{ runner.temp }}/dist

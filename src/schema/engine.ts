@@ -47,7 +47,7 @@ export const ffmpegDataSchema = z.strictObject({
 });
 export type FfmpegData = z.output<typeof ffmpegDataSchema>;
 
-/** Where a library's versions come from (see docs/specs/2026-10-08-lock-update-design.md §1). */
+/** Where a library's versions come from: git tags, a branch head, or a release listing page. */
 const versionsSchema = z.union(
   [
     z.strictObject({ 'git-tags': text, repo: text.optional() }),

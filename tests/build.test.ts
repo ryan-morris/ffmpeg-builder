@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -89,6 +89,23 @@ describe('cache keys', () => {
     expect(changed.get('libdrm')).not.toBe(keys().get('libdrm'));
     expect(changed.get('libva')).not.toBe(keys().get('libva')); // libva needs libdrm
     expect(changed.get('dav1d')).toBe(keys().get('dav1d'));
+  });
+
+  it("change for a library's licence files, but not for what builds against it", () => {
+    const root = mkdtempSync(join(tmpdir(), 'ffmpeg-build-keys-'));
+    cpSync(fixtureEngineRoot, root, { recursive: true });
+    const yml = join(root, 'recipes', 'libdrm', 'recipe.yml');
+    writeFileSync(yml, readFileSync(yml, 'utf8').replace('license-files: [COPYING]', 'license-files: [COPYING, { recipe: NOTICE }]'));
+    writeFileSync(join(root, 'recipes', 'libdrm', 'NOTICE'), 'kept beside the recipe\n');
+    const edited = loadEngineData(root);
+    expect(keys(edited).get('libdrm')).not.toBe(keys().get('libdrm'));
+    expect(keys(edited).get('libva')).toBe(keys().get('libva')); // libva needs libdrm
+    const before = keys(edited).get('libdrm'); // keys read the files when they're computed
+    writeFileSync(join(root, 'recipes', 'libdrm', 'NOTICE'), 'changed\n');
+    expect(keys(loadEngineData(root)).get('libdrm')).not.toBe(before);
+    expect(keys(loadEngineData(root)).get('libva')).toBe(keys().get('libva'));
+    writeFileSync(join(root, 'recipes', 'libdrm', 'build.sh'), 'echo changed\n');
+    expect(keys(loadEngineData(root)).get('libva')).not.toBe(keys().get('libva')); // anything else still counts
   });
 
   it('change when a recipe file changes, or the platform or image does', () => {

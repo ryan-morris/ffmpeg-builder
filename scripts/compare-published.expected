@@ -202,3 +202,7 @@ win-x64-lgplv3 legal +legal/licenses/vulkan-headers/LICENSES/Apache-2.0.txt
 win-x64-lgplv3 legal +legal/licenses/vulkan-headers/LICENSES/MIT.txt
 win-x64-lgplv3 legal +legal/licenses/vulkan-shim/Vulkan-Headers/LICENSE.md
 
+# win-x64-lgplv3 legal/: the notice of winpthreads, which mingw-w64 links statically into the DLLs (platforms.yml ships:);
+# upstream didn't ship it.
+win-x64-lgplv3 legal +legal/licenses/libwinpthread/copyright
+

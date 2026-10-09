@@ -69,12 +69,17 @@ platforms:
     runner: ubuntu-24.04
     configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-w32threads, --pkg-config=pkg-config, --target-os=mingw32, --enable-cross-compile, --arch=x86_64, --cross-prefix=x86_64-w64-mingw32-, --cc=x86_64-w64-mingw32-gcc-win32, --cxx=x86_64-w64-mingw32-g++-win32,
       "--extra-cflags=-static-libgcc -static-libstdc++ -O2 -pipe -DCHROMAPRINT_NODLL", "--extra-cxxflags=-static-libgcc -static-libstdc++ -O2 -pipe", "--extra-ldflags=-static-libgcc -static-libstdc++"]
+    # mingw-w64's winpthreads, linked statically into the DLLs (setup/windows.sh); its MIT notice must travel with
+    # them: Ubuntu's mingw-w64 copyright file, which has winpthreads' terms
+    ships: { libwinpthread: { license: MIT, notice: /usr/share/doc/mingw-w64-x86-64-dev/copyright } }
   win-arm64:
     image: cross-windows
     setup: windows
     runner: ubuntu-24.04
     configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-w32threads, --pkg-config=pkg-config, --target-os=mingw32, --enable-cross-compile, --arch=aarch64, --cross-prefix=aarch64-w64-mingw32-, --cc=aarch64-w64-mingw32-clang, --cxx=aarch64-w64-mingw32-clang++,
       "--extra-cflags=-static-libgcc -O2 -pipe -DCHROMAPRINT_NODLL", "--extra-cxxflags=-static-libgcc -static-libstdc++ -O2 -pipe -include system_error", "--extra-ldflags=-static-libgcc -static-libstdc++"]
+    # llvm-mingw's winpthreads, linked statically into the DLLs (setup/windows.sh), with its notice from llvm-mingw
+    ships: { libwinpthread: { license: MIT, notice: /opt/llvm-mingw/aarch64-w64-mingw32/share/mingw32/COPYING.winpthreads.txt } }
   # 32-bit ARM (Raspberry Pi with a 32-bit OS), cross-compiled with Debian's gcc; glibc 2.36+.
   linux-armhf:
     image: cross-armhf
