@@ -44,7 +44,7 @@ jobs:
           node-version: 24
       - name: engine
         env:
-          ENGINE: ${{ inputs.engine }}
+          ENGINE: ${{ inputs.engine }} # through env, never into the script text
         run: |
           if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
       - name: newer release?

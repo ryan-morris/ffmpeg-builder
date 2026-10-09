@@ -113,6 +113,7 @@ stage() {
   cp -a "${install}/bin/ffmpeg" "${install}/bin/ffprobe" "${run}/"
   while read -r glob; do # recipe.yml runtime: files that ship next to FFmpeg's libraries; globs, so unquoted
     shopt -s nullglob
+    # shellcheck disable=SC2206 # the runtime glob is meant to expand
     files=("${DEPS_DIR}"/${glob})
     shopt -u nullglob
     [ "${#files[@]}" -gt 0 ] || { echo "ERROR: nothing in ${DEPS_DIR} matches ${glob} (a recipe's runtime:)" >&2; exit 1; }

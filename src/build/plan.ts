@@ -199,7 +199,7 @@ export interface BuildPlan {
   patches: PlannedPatchSet[];
   // THIRD-PARTY-NOTICES.txt: the governing COPYING texts of FFmpeg to include, and the sections the plan can write
   notices: { governing: string[]; header: string; build: string; source: string };
-  ffmpeg: { version: string; archives: string[]; configure: string[]; verify: string[] };
+  ffmpeg?: { version: string; archives: string[]; configure: string[]; verify: string[] }; // none: build the libraries only
 }
 
 // How upstream devenvy/ffmpeg 10_write_legal.sh names each licence, and which of FFmpeg's COPYING texts govern it.

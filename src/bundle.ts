@@ -11,7 +11,7 @@ import type { FolderLock } from './lockfile.ts';
 import { formatManifest, MANIFEST_FILE, parseManifest, type Manifest, type ManifestTarget } from './manifest.ts';
 import { packageVersion } from './paths.ts';
 import { planReleases, removals, type PlannedRelease, type PlannedTarget } from './release.ts';
-import { previousRelease, publishingRepo } from './release-remote.ts';
+import { previousReleases, publishingRepo } from './release-remote.ts';
 import { writeTarGz, type TarEntry } from './tar-write.ts';
 import { artifactName, type Folder } from './targets.ts';
 
@@ -66,13 +66,14 @@ function builtTarget(dist: string, p: PlannedTarget): { runtime: string; dev: st
     if (!existsSync(kept)) throw new BundleError(`${p.target.name}: the kept source ${s.file} isn't in ${name}.sources/ (build it again)`);
     if (sha256(kept) !== s.sha256) throw new BundleError(`${p.target.name}: ${name}.sources/${s.file} doesn't match its record; build it again`);
   }
+  const applied = sources.patches.map((x) => x.sha256).sort().join(' ');
+  if (applied !== p.facts.patches.map((x) => x.sha256).sort().join(' ')) throw new BundleError(`${p.target.name} was built with other patches than the folder has now; build it again`);
   const built = new Set(sources.libraries.map((l) => `${l.name} ${l.version}`));
   const planned = Object.entries(p.facts.components).map(([n, v]) => `${n} ${v}`).filter((x) => !built.has(x));
   if (planned.length) throw new BundleError(`${p.target.name} was built from other versions than ffmpeg.lock says (${planned.join(', ')}); build it again`);
   return { runtime: files.runtime, dev: files.dev, sources };
 }
 
-/** The release's sources archive: every kept source once, the build definition, and the engine files it used. */
 /**
  * Where each kept source goes in the sources archive. A file each build used is kept once; the same name with other
  * bytes (a git commit archived by another machine's tar and gzip) goes beside it under its sha256's first 12 digits,
@@ -95,6 +96,7 @@ function archivedPaths(rel: PlannedRelease, built: Map<string, SourcesJson>): Ma
   return at;
 }
 
+/** The release's sources archive: each build's kept sources, the build definition, and the engine files it used. */
 async function writeSources(out: string, root: string, folder: Folder, rel: PlannedRelease, built: Map<string, SourcesJson>, data: EngineData, engineRoot: string, dist: string): Promise<void> {
   const archived = archivedPaths(rel, built);
   const entries: TarEntry[] = [];
@@ -114,16 +116,16 @@ async function writeSources(out: string, root: string, folder: Folder, rel: Plan
   // the engine at its version: every recipe a target used, the platform scripts and the toolchain images
   const recipes = [...new Set(rel.targets.flatMap((p) => p.cell.recipes))].sort();
   const images = [...new Set(rel.targets.map((p) => data.platforms.get(p.target.platform)!.image).filter((i) => i !== 'macos'))].sort();
-  const engineFiles = [
-    'package.json', 'platforms.yml', 'licenses.yml', `ffmpeg/${rel.ffmpeg.split('.')[0]}.yml`,
-    ...filesUnder(join(engineRoot, 'platforms')).map((f) => `platforms/${f}`),
-    ...images.flatMap((i) => filesUnder(join(engineRoot, 'images', i)).map((f) => `images/${i}/${f}`)),
-    'recipes/lib.sh',
+  const fromEngine = ['package.json', ...filesUnder(join(engineRoot, 'platforms')).map((f) => `platforms/${f}`), ...images.flatMap((i) => filesUnder(join(engineRoot, 'images', i)).map((f) => `images/${i}/${f}`))];
+  const fromData = [
+    'platforms.yml', 'licenses.yml', 'ffmpeg/source.yml', `ffmpeg/${rel.ffmpeg.split('.')[0]}.yml`, 'recipes/lib.sh',
     ...recipes.flatMap((r) => filesUnder(join(data.root, 'recipes', r)).map((f) => `recipes/${r}/${f}`)),
   ];
-  for (const f of engineFiles) {
-    const from = f.startsWith('recipes/') ? join(data.root, f) : join(engineRoot, f);
-    if (existsSync(from)) entries.push({ path: `${root}/engine/${f}`, file: from });
+  for (const [base, files] of [[engineRoot, fromEngine], [data.root, fromData]] as const) {
+    for (const f of files) {
+      if (!existsSync(join(base, f))) throw new BundleError(`the engine file ${f} is missing from ${base}; the sources archive would be incomplete`);
+      entries.push({ path: `${root}/engine/${f}`, file: join(base, f) });
+    }
   }
   entries.push({ path: `${root}/SOURCES.md`, text: sourcesIndex(rel, built, archived) });
   await writeTarGz(out, entries);
@@ -169,6 +171,30 @@ function releaseNotes(m: Manifest, rel: PlannedRelease, repo: string | undefined
 }
 
 /**
+ * Whether these targets may be published to `repo`. A public repository takes no nonfree build. A private one takes a
+ * release only when the folder says `private-release: internal`: its builds, and the source their notices link to,
+ * then reach only people with access to that repository. `strict` (bundle) also refuses when the repository or its
+ * visibility can't be told; otherwise (planning, local runs) that is no problem.
+ */
+export async function publishingProblems(folder: Folder, targets: { name: string; license: string }[], repo: string | undefined, o: { strict: boolean }): Promise<string[]> {
+  const nonfree = targets.filter((t) => t.license === 'nonfree').map((t) => t.name);
+  const which = (names: string[]) => `${names.join(', ')} ${names.length > 1 ? 'are' : 'is'}`;
+  if (!repo) return o.strict && nonfree.length ? [`${which(nonfree)} nonfree, and there's no repository to check is private (GITHUB_REPOSITORY or the folder's git remote)`] : [];
+  let priv: boolean;
+  try {
+    priv = await repoIsPrivate(repo);
+  } catch (e) {
+    if (!(e instanceof FetchError)) throw e;
+    return o.strict ? [`${repo}'s visibility can't be read, so whether it may take these builds can't be told: ${e.message}`] : [];
+  }
+  if (!priv) return nonfree.length ? [`${which(nonfree)} nonfree: internal use only, never published to a public repository (${repo} is public)`] : [];
+  if (folder.privateRelease !== 'internal') {
+    return [`${repo} is private: its releases, and the source their notices link to, reach only people with access to it. Say that is intended with private-release: internal at the top of ffmpeg-build.yml`];
+  }
+  return [];
+}
+
+/**
  * Bundles the release `tag` from the builds in `dist`. Refuses (BundleError) when a build is missing or doesn't match
  * the lock, when a component disappeared since the last release, or when a nonfree build would go to a public (or an
  * unacknowledged private) repository.
@@ -179,25 +205,14 @@ export async function bundle(folder: Folder, data: EngineData, lock: FolderLock,
   if (frameworks.length) throw new BundleError(`${o.tag} has iOS / Mac Catalyst targets (${frameworks.join(', ')}); their xcframework bundle (bundle --apple, on a Mac) isn't available yet`);
   const repo = o.repo ?? publishingRepo(folder.dir);
 
-  // nonfree builds: never to a public repository; to a private one only when the folder says so
-  const nonfree = rel.targets.filter((p) => p.target.license === 'nonfree').map((p) => p.target.name);
-  if (nonfree.length) {
-    if (!repo) throw new BundleError(`${nonfree.join(', ')} ${nonfree.length > 1 ? 'are' : 'is'} nonfree, and there's no repository to check is private (GITHUB_REPOSITORY or the folder's git remote)`);
-    let priv: boolean;
-    try {
-      priv = await repoIsPrivate(repo);
-    } catch (e) {
-      throw new BundleError(`${nonfree.join(', ')} ${nonfree.length > 1 ? 'are' : 'is'} nonfree, and ${repo}'s visibility can't be read: ${(e as Error).message}`);
-    }
-    if (!priv) throw new BundleError(`${nonfree.join(', ')} ${nonfree.length > 1 ? 'are' : 'is'} nonfree: internal use only, never published to a public repository (${repo} is public)`);
-    if (folder.nonfreeRelease !== 'internal') throw new BundleError(`${nonfree.join(', ')} ${nonfree.length > 1 ? 'are' : 'is'} nonfree; publishing to ${repo} (private) needs nonfree-release: internal at the top of ffmpeg-build.yml`);
-  }
+  const refused = await publishingProblems(folder, rel.targets.map((p) => ({ name: p.target.name, license: p.target.license })), repo, { strict: true });
+  if (refused.length) throw new BundleError(refused.join('\n'));
 
   // the always-on guard: the last release of this base
   let previous = o.previous;
   if (!previous && repo) {
     try {
-      previous = (await previousRelease(repo, rel.base))?.manifest;
+      previous = (await previousReleases(repo, rel.group, rel.ffmpeg)).lastInMajor?.manifest;
     } catch (e) {
       if (e instanceof FetchError) throw new BundleError(`can't read ${repo}'s last release to check nothing was removed: ${e.message}`);
       throw e;
@@ -246,7 +261,8 @@ export async function bundle(folder: Folder, data: EngineData, lock: FolderLock,
     try {
       for (const r of await listReleases(repo)) {
         const t = parseTag(r.tag_name);
-        if (!r.draft && t && t.group === rel.group && !ffmpegAtLeast(rel.ffmpeg, t.ffmpeg)) latest = false;
+        // GitHub has one "latest" per repository, whatever the group
+        if (!r.draft && !r.prerelease && t && !ffmpegAtLeast(rel.ffmpeg, t.ffmpeg)) latest = false;
       }
     } catch (e) {
       if (!(e instanceof FetchError)) throw e;

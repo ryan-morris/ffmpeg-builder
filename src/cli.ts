@@ -155,11 +155,13 @@ program
   .option('--target <name>', 'the target to build (`ffmpeg-build targets` lists them)')
   .option('--out <dir>', 'where the archives go', 'dist')
   .option('--dry-run', 'say what would be built, and in which toolchain, without building')
-  .action((opts: { target?: string; out: string; dryRun?: boolean }) =>
+  .option('--only <recipes>', 'build just these libraries (and what they need), without FFmpeg: a recipe check')
+  .action((opts: { target?: string; out: string; dryRun?: boolean; only?: string }) =>
     run(() => {
       const folder = openFolder();
       if (!opts.target) throw new UsageError('name the target to build: --target <name> (`ffmpeg-build targets` lists them)');
-      return runTargetBuild(folder, opts.target, data(), { out: opts.out, dryRun: opts.dryRun === true });
+      const only = opts.only?.split(',').map((s) => s.trim()).filter(Boolean);
+      return runTargetBuild(folder, opts.target, data(), { out: opts.out, dryRun: opts.dryRun === true, ...(only ? { only } : {}) });
     }),
   );
 

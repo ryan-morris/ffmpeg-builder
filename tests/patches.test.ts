@@ -23,6 +23,12 @@ const check = (file: string) => formatReport(checkProfile(loadProfile(file), dat
 const proprietary = (majors: string) => `name: acme-muxer\nlicense: proprietary\nlicense-files: [LICENSE]\nffmpeg: ${majors}\n`;
 
 describe('patch sets', () => {
+  it('must be a folder inside the profile folder', () => {
+    const file = folder('nonfree', proprietary('[8, 9]'), ['8', '9']);
+    writeFileSync(file, 'name: p\nffmpeg: 9\nplatforms: [linux-x64]\nlicense: nonfree\nwith: [dav1d]\npatches: [../shared/acme]\n');
+    expect(check(file)).toContain("✗ patches: ../shared/acme: a patch set must be a folder inside this one (it goes into the release's sources archive at the same path)");
+  });
+
   it('needs nonfree for a proprietary patch set', () => {
     const text = check(folder('lgplv3', proprietary('[8, 9]'), ['8', '9']));
     expect(text).toContain('✗ patches: patches/acme-muxer: acme-muxer is `license: proprietary`; it can only be built with `license: nonfree`');

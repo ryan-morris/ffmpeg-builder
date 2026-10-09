@@ -1,0 +1,52 @@
+# ffmpeg-build.yml: made by `ffmpeg-build init` from the shipped devenvy targets. Each target is one build
+# (one platform, one license, one FFmpeg series); bases hold what targets share. `ffmpeg-build show <target>`
+# lists what a target gets and where each entry comes from.
+bases:
+  common:
+    with: [openh264, dav1d, openjpeg, jxl, zimg, vmaf, lcms2, vorbis, mp3lame, speex, gsm, soxr, chromaprint,
+           xml2, zlib, srt, rist, whisper, aom, vpx, webp, opus, freetype, fribidi, harfbuzz, ass, nvenc, vpl,
+           svtav1]
+  linux:
+    with: [v4l2-m2m, fontconfig, vaapi, drm]
+  win:
+    with: [amf, d3d11va, dxva2, mediafoundation, schannel]
+  gplv2:
+    with: [x264, x265]
+  gplv3:
+    with: [x264, x265, opencore-amrnb, opencore-amrwb, placebo, vo-amrwbenc, vulkan]
+  lgplv3:
+    with: [kvazaar, opencore-amrnb, opencore-amrwb, placebo, vo-amrwbenc, vulkan]
+targets:
+  linux-x64-gplv2:
+    platform: linux-x64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, linux, gplv2]
+    with: [gnutls]
+  linux-x64-gplv3:
+    platform: linux-x64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, linux, gplv3]
+    with: [openssl]
+  linux-x64-lgplv3:
+    platform: linux-x64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, linux, lgplv3]
+    with: [openssl]
+  win-x64-gplv2:
+    platform: win-x64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, win, gplv2]
+  win-x64-gplv3:
+    platform: win-x64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, win, gplv3]
+  win-x64-lgplv3:
+    platform: win-x64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, win, lgplv3]

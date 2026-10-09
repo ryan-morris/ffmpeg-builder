@@ -1,0 +1,101 @@
+# Recipe checks: a change to a recipe builds that library (and what it builds against, not FFmpeg) on every canary
+# target that uses it, at the canary lock's versions; a change to the toolchains (platform scripts, images) builds the
+# small test targets in full.
+name: recipes
+on:
+  pull_request:
+    paths: ['recipes/**', 'platforms/**', 'images/**', 'platforms.yml']
+  push:
+    branches: [main]
+    paths: ['recipes/**', 'platforms/**', 'images/**', 'platforms.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  changed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      any: ${{ steps.plan.outputs.any }}
+      toolchain: ${{ steps.plan.outputs.toolchain }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: engine
+        run: npm ci && npm run build && npm link
+      - id: plan
+        name: what changed, and which canary targets build it
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then BASE="$(git rev-parse HEAD~1)"; fi
+          git diff --name-only "${BASE}" HEAD > "${RUNNER_TEMP}/changed"
+          sed -n 's#^recipes/\([^/]*\)/.*#\1#p' "${RUNNER_TEMP}/changed" | sort -u > "${RUNNER_TEMP}/recipes"
+          if grep -qE '^(platforms/|images/|platforms\.yml$|recipes/lib\.sh$)' "${RUNNER_TEMP}/changed"; then toolchain=true; else toolchain=false; fi
+          (cd examples/canary && ffmpeg-build plan --json) > "${RUNNER_TEMP}/plan.json"
+          (cd examples/canary && ffmpeg-build releases --json --offline) > "${RUNNER_TEMP}/releases.json"
+          # shellcheck disable=SC2016 # the script is JavaScript: its ${...} are JavaScript's, not the shell's
+          node -e '
+            const fs = require("fs");
+            const [planFile, relFile, recipesFile] = process.argv.slice(1);
+            const changed = fs.readFileSync(recipesFile, "utf8").split("\n").filter(Boolean);
+            const runner = Object.fromEntries(JSON.parse(fs.readFileSync(relFile, "utf8")).flatMap((r) => r.targets.map((t) => [t.name, { runner: t.runner, cacheKey: t.cacheKey, platform: t.platform }])));
+            const include = [];
+            for (const t of JSON.parse(fs.readFileSync(planFile, "utf8"))) {
+              const only = changed.filter((c) => t.builds.some((b) => b.libraries.includes(c)));
+              if (only.length) include.push({ target: t.target, only: only.join(","), ...runner[t.target] });
+            }
+            const out = fs.openSync(process.env.GITHUB_OUTPUT, "a");
+            fs.writeSync(out, `matrix=${JSON.stringify({ include })}\nany=${include.length > 0}\n`);
+            const unused = changed.filter((c) => !include.some((i) => i.only.split(",").includes(c)));
+            if (unused.length) console.log(`::notice::no canary target builds ${unused.join(", ")}; build it by hand on its platform`);
+          ' "${RUNNER_TEMP}/plan.json" "${RUNNER_TEMP}/releases.json" "${RUNNER_TEMP}/recipes"
+          echo "toolchain=${toolchain}" >> "$GITHUB_OUTPUT"
+
+  recipe:
+    needs: changed
+    if: needs.changed.outputs.any == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.changed.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      FFMPEG_BUILD_IMAGE_CACHE: gha
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: engine
+        run: npm ci && npm run build && npm link
+      - uses: docker/setup-buildx-action@v4
+      - uses: crazy-max/ghaction-github-runtime@v4
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ffmpeg-build
+          key: ${{ matrix.cacheKey }}
+          restore-keys: ffmpeg-build-libs-${{ matrix.platform }}-
+      - name: build ${{ matrix.only }} for ${{ matrix.target }}
+        working-directory: examples/canary
+        run: ffmpeg-build build --target "${{ matrix.target }}" --only "${{ matrix.only }}" --out "${{ runner.temp }}/dist"
+
+  toolchain:
+    needs: changed
+    if: needs.changed.outputs.toolchain == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build.yml
+    with:
+      folder: examples/test-builds
+      engine: source
+      publish: never

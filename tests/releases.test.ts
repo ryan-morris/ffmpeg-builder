@@ -89,6 +89,31 @@ describe('ffmpeg-build releases', () => {
     expect((await runCliAsync(['releases'], { cwd: d, env })).exitCode).toBe(0);
   });
 
+  it('judges a move to a new FFmpeg version against the last release of the same major: nothing disappears unseen', async () => {
+    const d = folder();
+    // the last release was on FFmpeg 9.0.2, with a library the folder no longer builds; the lock has moved to 9.1.0
+    gh.publish('9.0.2.5', [{ name: 'linux-x64-lgplv3', platform: 'linux-x64', components: { dav1d: '1.5.4', opus: '1.6.1', zimg: '3.0' } }], { engine: packageVersion() });
+    const r = await runCliAsync(['releases', '--json'], { cwd: d, env });
+    const [main] = JSON.parse(r.stdout) as { tag: string; previous: string; reasons: string[]; removals: string[] }[];
+    expect(main!.tag).toBe('9.1.0.0'); // build numbers count within the FFmpeg version
+    expect(main!.previous).toBe('9.0.2.5');
+    expect(main!.reasons[0]).toContain('FFmpeg 9.0.2 -> 9.1.0');
+    expect(main!.removals).toEqual(['linux-x64-lgplv3: zimg was in 9.0.2.5 and is gone now; if that is intended, add allow-removal: [zimg] to the target']);
+    expect(r.exitCode).toBe(1);
+  });
+
+  it('refuses, before anything builds, a nonfree target for a public repository and a private one not acknowledged', async () => {
+    const nonfree = folder(`${FOLDER}  dvr-internal: { platform: linux-x64, license: nonfree, ffmpeg: 9, with: [dav1d] }\n`);
+    const pub = await runCliAsync(['releases', '--json'], { cwd: nonfree, env });
+    expect(pub.exitCode).toBe(1);
+    expect(JSON.parse(pub.stdout).error).toContain('dvr-internal is nonfree: internal use only, never published to a public repository (o/r is public)');
+    gh.private = true;
+    const unacknowledged = await runCliAsync(['releases'], { cwd: folder(), env });
+    expect(unacknowledged.exitCode).toBe(1);
+    expect(unacknowledged.stdout).toContain('o/r is private: its releases, and the source their notices link to, reach only people with access to it');
+    expect((await runCliAsync(['releases'], { cwd: folder(`private-release: internal\n${FOLDER}`), env })).exitCode).toBe(0);
+  });
+
   it('counts a release made before ffmpeg-build (no manifest) for the build number, and treats it as changed', async () => {
     const d = folder();
     gh.releases.push({ tag: '9.1.0.7', files: {} });

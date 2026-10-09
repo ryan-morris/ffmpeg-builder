@@ -11,7 +11,7 @@ import type { CellPlan } from '../resolve.ts';
 import type { PlatformEntry } from '../schema/engine.ts';
 import { artifactName, FOLDER_FILE, targetProfile, type Folder } from '../targets.ts';
 import { folderErrors, FolderError, runFolderCheck } from './folder.ts';
-import type { EngineData } from '../engine-data.ts';
+import { depsOn, type EngineData } from '../engine-data.ts';
 import { packageRoot } from '../paths.ts';
 import { displayPath, type Profile } from '../profile.ts';
 import { planProfile } from '../resolve.ts';
@@ -74,7 +74,25 @@ function platformEntry(data: EngineData, platform: string): PlatformEntry | Resu
 }
 
 /** Builds a target: its one build, named after it (see artifactName). */
-export async function runTargetBuild(folder: Folder, name: string, data: EngineData, options: { out: string; dryRun?: boolean }): Promise<Result> {
+/**
+ * The libraries `only` names and everything they build against in this build, in build order: a recipe check builds
+ * them without FFmpeg. Names this build doesn't have are an error.
+ */
+export function onlyLibraries(data: EngineData, cell: CellPlan, only: string[]): string[] {
+  const missing = only.filter((n) => !cell.recipes.includes(n));
+  if (missing.length) throw new FolderError(`this target doesn't build ${missing.join(', ')} (it builds ${cell.recipes.join(', ')})`);
+  const keep = new Set<string>();
+  const add = (n: string) => {
+    if (keep.has(n)) return;
+    keep.add(n);
+    const r = data.recipes.get(n)!;
+    for (const d of [...depsOn(r, 'needs', cell.cell.platform), ...depsOn(r, 'uses', cell.cell.platform)]) if (cell.recipes.includes(d)) add(d);
+  };
+  only.forEach(add);
+  return cell.recipes.filter((n) => keep.has(n));
+}
+
+export async function runTargetBuild(folder: Folder, name: string, data: EngineData, options: { out: string; dryRun?: boolean; only?: string[] }): Promise<Result> {
   const t = folder.targets.find((x) => x.name === name);
   if (!t) throw new FolderError(`no target ${name} in ${FOLDER_FILE} (targets: ${folder.targets.map((x) => x.name).join(', ')})`);
   const entry = platformEntry(data, t.platform);
@@ -90,8 +108,10 @@ export async function runTargetBuild(folder: Folder, name: string, data: EngineD
   const profile = targetProfile(folder, t);
   const [cell] = planProfile(profile, data, { [t.ffmpeg]: version }).cells;
   const buildName = artifactName(t, version);
+  const only = options.only?.length ? onlyLibraries(data, cell!, options.only) : undefined;
+  if (only && options.dryRun) return { output: `would build ${only.join(', ')} for ${t.platform}, without FFmpeg`, exitCode: 0 };
   if (options.dryRun) return { output: `would build ${buildName} (${t.platform}) in ${entry.image === 'macos' ? 'Xcode on this Mac' : `ffmpeg-build-${entry.image}`}`, exitCode: 0 };
-  return runJob({ platform: t.platform, target: entry, profile, locked: { ffmpeg: lock.ffmpeg, libraries: lock.libraries, pinned: [] }, out: options.out, builds: [{ cell: cell!, variant: t.name, name: buildName, ...(t.releaseGroup ? { group: t.releaseGroup } : {}) }] }, data);
+  return runJob({ platform: t.platform, target: entry, profile, locked: { ffmpeg: lock.ffmpeg, libraries: lock.libraries, pinned: [] }, out: options.out, builds: [{ cell: cell!, variant: t.name, name: buildName, ...(t.releaseGroup ? { group: t.releaseGroup } : {}), ...(only ? { only } : {}) }] }, data);
 }
 
 interface Job {
@@ -100,7 +120,7 @@ interface Job {
   profile: Profile;
   locked: LockedProfile;
   out: string;
-  builds: { cell: CellPlan; variant: string; name?: string; group?: string }[];
+  builds: { cell: CellPlan; variant: string; name?: string; group?: string; only?: string[] }[]; // only: these libraries, no FFmpeg
 }
 
 /** Runs the builds of one platform: in its toolchain image, or natively on a Mac. */
@@ -139,8 +159,8 @@ async function runJob(job: Job, data: EngineData): Promise<Result> {
     const source = sourceIdentity(folderDir);
     const releaseTag = process.env.FFMPEG_BUILD_RELEASE || undefined;
     const repository = releaseTag ? publishingRepo(folderDir) : undefined;
-    for (const { cell, variant, name, group } of job.builds) {
-      const plan = makeBuildPlan({
+    for (const { cell, variant, name, group, only } of job.builds) {
+      const full = makeBuildPlan({
         profile, data, locked, cell, imageId: toolchain, cacheDir: libs,
         variant, source,
         ...(releaseTag ? { release: releaseTag } : {}),
@@ -149,6 +169,8 @@ async function runJob(job: Job, data: EngineData): Promise<Result> {
         ...(name ? { name } : {}),
         ...(paths ? { depsDir: paths.depsDir } : {}),
       });
+      const { ffmpeg: _ffmpeg, ...withoutFfmpeg } = full;
+      const plan = only ? { ...withoutFfmpeg, libraries: full.libraries.filter((l) => only.includes(l.name)) } : full;
       const planDir = mkdtempSync(join(tmpdir(), 'ffmpeg-build-plan-'));
       const planPath = join(planDir, 'plan.json');
       const log = join(out, `${plan.name}.log`);
@@ -171,7 +193,7 @@ async function runJob(job: Job, data: EngineData): Promise<Result> {
         const what = result.lastError ?? "FFmpeg's build failed";
         throw new BuildError([...built, `building ${plan.name} failed: ${what}; the log is ${displayPath(log)}`].join('\n'));
       }
-      built.push(`built ${displayPath(join(out, `${plan.name}.tar.gz`))}, ${plan.name}-dev.tar.gz and ${plan.name}.sources.json`);
+      built.push(only ? `built ${only.join(', ')} for ${job.platform} (libraries only, no FFmpeg)` : `built ${displayPath(join(out, `${plan.name}.tar.gz`))}, ${plan.name}-dev.tar.gz and ${plan.name}.sources.json`);
     }
     return { output: built.join('\n'), exitCode: 0 };
   } finally {

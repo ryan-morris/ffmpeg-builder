@@ -13,6 +13,7 @@ stage() {
   # files recipes ship next to FFmpeg's libraries (recipe.yml runtime:, e.g. the Vulkan loader); globs, so unquoted
   while read -r glob; do
     shopt -s nullglob
+    # shellcheck disable=SC2206 # the runtime glob is meant to expand
     files=("${DEPS_DIR}"/${glob})
     shopt -u nullglob
     [ "${#files[@]}" -gt 0 ] || { echo "ERROR: nothing in ${DEPS_DIR} matches ${glob} (a recipe's runtime:)" >&2; exit 1; }

@@ -1,5 +1,4 @@
-# REUSABLE (preview: not yet run end to end on a real repository). A folder of targets calls it to build and publish
-# its releases:
+# REUSABLE (preview). A folder of targets calls it to build and publish its releases:
 #   plan (releases --json) -> build each target on its runner -> iOS bundle (macOS) -> bundle + release per release
 # `publish: changed-only` builds and publishes only the releases that changed since their last release; `always` all
 # of them; `never` builds without publishing (CI for pull requests).
@@ -20,13 +19,10 @@ on:
         description: ffmpeg-build version to run (default the one ffmpeg.lock records; "source" builds this repository)
         type: string
         default: ''
-    secrets:
-      token:
-        description: read access to private patch repositories, if any
-        required: false
 
+# read-only everywhere; only the release job writes (it creates the GitHub release)
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   plan:
@@ -37,9 +33,12 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       any: ${{ steps.plan.outputs.any }}
       apple: ${{ steps.plan.outputs.apple }}
+      apple_releases: ${{ steps.plan.outputs.apple_releases }}
       engine: ${{ steps.engine.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -72,6 +71,7 @@ jobs:
             echo "matrix=$(jq -c '{include: [.[] as $r | $r.targets[] | {release: $r.tag, target: .name, platform: .platform, runner: .runner, cacheKey: .cacheKey}]}' "${RUNNER_TEMP}/releases.json")"
             echo "any=$(jq 'length > 0' "${RUNNER_TEMP}/releases.json")"
             echo "apple=$(jq '[.[].targets[].platform | select(test("^(ios|maccatalyst)-"))] | length > 0' "${RUNNER_TEMP}/releases.json")"
+            echo "apple_releases=$(jq -c '[.[] | select(any(.targets[]; .platform | test("^(ios|maccatalyst)-"))) | .tag]' "${RUNNER_TEMP}/releases.json")"
           } >> "$GITHUB_OUTPUT"
           jq -r '.[] | "\(.tag): \(if .due then "due" else "unchanged" end) — \(.reasons | join("; "))"' "${RUNNER_TEMP}/releases.json" >> "$GITHUB_STEP_SUMMARY"
 
@@ -87,11 +87,12 @@ jobs:
       FFMPEG_BUILD_IMAGE_CACHE: gha
       FFMPEG_BUILD_SOURCE_REPO: ${{ github.server_url }}/${{ github.repository }}
       FFMPEG_BUILD_SOURCE_REF: ${{ github.sha }}
-      FFMPEG_BUILD_RELEASE: ${{ matrix.release }}
+      # the release the notices name: only when this run publishes it (a PR check's builds go nowhere)
+      FFMPEG_BUILD_RELEASE: ${{ inputs.publish != 'never' && matrix.release || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
-          token: ${{ secrets.token || github.token }}
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -130,11 +131,13 @@ jobs:
     if: needs.plan.outputs.apple == 'true' && inputs.publish != 'never'
     strategy:
       matrix:
-        release: ${{ fromJson(needs.plan.outputs.releases).*.tag }}
+        release: ${{ fromJson(needs.plan.outputs.apple_releases) }}
     runs-on: macos-15
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -170,12 +173,16 @@ jobs:
     concurrency:
       group: release-${{ github.repository }}
       cancel-in-progress: false
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }} # gh runs in the dist folder, which isn't a checkout
       TAG: ${{ matrix.release }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -197,7 +204,13 @@ jobs:
       - name: publish
         run: |
           cd "${RUNNER_TEMP}/dist"
-          gh release create "${TAG}" --draft --title "${TAG}" --notes-file release-notes.md --target "${GITHUB_SHA}"
+          # a draft left by a run that failed part way is reused; a published release is never touched again
+          if draft="$(gh release view "${TAG}" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            [ "${draft}" = true ] || { echo "::error::${TAG} is already published; releases are never replaced"; exit 1; }
+            gh release edit "${TAG}" --notes-file release-notes.md
+          else
+            gh release create "${TAG}" --draft --title "${TAG}" --notes-file release-notes.md --target "${GITHUB_SHA}"
+          fi
           for f in $(jq -r '.assets[]' bundle.json); do
             for i in 1 2 3; do gh release upload "${TAG}" "${f}" --clobber && break; sleep $((i * 10)); done
           done

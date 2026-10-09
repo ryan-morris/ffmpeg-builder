@@ -289,6 +289,6 @@ describe('native builds', () => {
 
   it('carry the deps folder in the plan', () => {
     const plan = makeBuildPlan({ profile: dvr, data, locked: dvrLock, cell: linuxCell(dvr, dvrLock), variant: 'nonfree', imageId: 'x', cacheDir: tmpdir(), depsDir: '/Users/me/d' });
-    expect(plan.ffmpeg.configure).toContain('--extra-cflags=-I/Users/me/d/include');
+    expect(plan.ffmpeg!.configure).toContain('--extra-cflags=-I/Users/me/d/include');
   });
 });

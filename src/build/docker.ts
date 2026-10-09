@@ -39,10 +39,6 @@ async function inspectId(tag: string): Promise<string | undefined> {
 }
 
 /**
- * The image's tag and Docker ID, building it from images/<image> when this machine doesn't have it yet. The ID is
- * the library cache's toolchain identity: dnf packages aren't pinned, so a rebuilt image counts as a new toolchain.
- */
-/**
  * The docker command that builds a toolchain image. With FFMPEG_BUILD_IMAGE_CACHE=gha (set by the CI workflow), buildx
  * reuses GitHub Actions' cache, one scope per image, so CI doesn't rebuild an unchanged image every run.
  */
@@ -51,6 +47,10 @@ export function imageBuildArgs(tag: string, dir: string, image: string, cache = 
   return ['build', '-t', tag, dir];
 }
 
+/**
+ * The image's tag and Docker ID, building it from images/<image> when this machine doesn't have it yet. The ID is
+ * the library cache's toolchain identity: dnf packages aren't pinned, so a rebuilt image counts as a new toolchain.
+ */
 export async function ensureImage(root: string, image: string): Promise<{ tag: string; id: string }> {
   const tag = imageTag(root, image);
   let id = await inspectId(tag);

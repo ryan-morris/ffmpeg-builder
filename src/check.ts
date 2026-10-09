@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 import { optionsOf, recipeForPin, resolveName, type EngineData } from './engine-data.ts';
 import { describePlatforms, platformMatches } from './platforms.ts';
@@ -98,6 +98,10 @@ function patchProblems(profile: Profile, data: EngineData, ctx: Ctx): Block[] {
   const problem = (p: string, message: string, detail?: string) =>
     lines.push({ mark: '✗', text: `patches: ${p}: ${message}`, ...(detail ? { detail: [detail] } : {}) });
   for (const p of profile.patches) {
+    if (isAbsolute(p) || p.replaceAll('\\', '/').split('/').includes('..')) {
+      problem(p, 'a patch set must be a folder inside this one (it goes into the release\'s sources archive at the same path)');
+      continue;
+    }
     let raw: unknown;
     try {
       raw = parseYaml(readFileSync(join(profile.dir, p, 'about.yml'), 'utf8'), `${p}/about.yml`);

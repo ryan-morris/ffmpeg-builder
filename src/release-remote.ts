@@ -23,19 +23,41 @@ export function publishingRepo(dir: string): string | undefined {
 /** The last release of a tag base. One made before ffmpeg-build has no manifest, but still counts for build numbers. */
 export interface Previous { tag: string; build: number; manifest?: Manifest }
 
-/** The highest published (not draft) release whose tag is `<base>.<build>`, with its manifest; none when there is none. */
-export async function previousRelease(repo: string, base: string): Promise<Previous | undefined> {
-  let best: { tag: string; build: number } | undefined;
-  for (const r of await listReleases(repo)) {
-    const t = parseTag(r.tag_name);
-    if (r.draft || !t || `${t.group ? `${t.group}-` : ''}${t.ffmpeg}` !== base) continue;
-    if (!best || t.build > best.build) best = { tag: r.tag_name, build: t.build };
-  }
-  if (!best) return undefined;
+async function withManifest(repo: string, at: { tag: string; build: number }): Promise<Previous> {
   try {
-    return { ...best, manifest: (await readManifest({ repo, tag: best.tag })).manifest };
+    return { ...at, manifest: (await readManifest({ repo, tag: at.tag })).manifest };
   } catch (e) {
-    if (e instanceof FetchError && /has no asset manifest\.yml/.test(e.message)) return best;
+    if (e instanceof FetchError && /has no asset manifest\.yml/.test(e.message)) return at;
     throw e;
   }
+}
+
+const key = (ffmpeg: string, build: number) => {
+  const [a = 0, b = 0, c = 0] = ffmpeg.split('.').map(Number);
+  return [a, b, c, build];
+};
+const later = (x: number[], y: number[]) => {
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i]! > y[i]!;
+  return false;
+};
+
+/**
+ * A release's predecessors among the published (not draft) releases: `sameBase`, the highest build of the same group
+ * and FFmpeg version (it numbers the next build); `lastInMajor`, the newest release of the same group and FFmpeg major
+ * (what the release follows on from: a move from 9.0.2 to 9.0.3 still compares with 9.0.2's last build).
+ */
+export async function previousReleases(repo: string, group: string, ffmpeg: string): Promise<{ sameBase?: Previous; lastInMajor?: Previous }> {
+  let same: { tag: string; build: number } | undefined;
+  let last: { tag: string; build: number; key: number[] } | undefined;
+  for (const r of await listReleases(repo)) {
+    const t = parseTag(r.tag_name);
+    if (r.draft || !t || t.group !== group || t.ffmpeg.split('.')[0] !== ffmpeg.split('.')[0]) continue;
+    if (t.ffmpeg === ffmpeg && (!same || t.build > same.build)) same = { tag: r.tag_name, build: t.build };
+    const k = key(t.ffmpeg, t.build);
+    if (!last || later(k, last.key)) last = { tag: r.tag_name, build: t.build, key: k };
+  }
+  return {
+    ...(same ? { sameBase: await withManifest(repo, same) } : {}),
+    ...(last ? { lastInMajor: last.tag === same?.tag ? await withManifest(repo, same) : await withManifest(repo, { tag: last.tag, build: last.build }) } : {}),
+  };
 }

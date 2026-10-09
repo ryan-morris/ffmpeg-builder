@@ -57,6 +57,14 @@ describe('ffmpeg-build build', () => {
     expect(r.stdout).toContain('✗ pin x265: no target builds x265; remove the pin');
   });
 
+  it('--only builds just some libraries and what they need, in build order, without FFmpeg', async () => {
+    const r = await runCliAsync(['build', '--target', 'linux-x64', '--only', 'srt,libva', '--dry-run'], { cwd: folder(true), env });
+    expect(r.stdout).toContain('would build libdrm, libva, mbedtls, srt for linux-x64, without FFmpeg');
+    const bad = await runCliAsync(['build', '--target', 'linux-x64', '--only', 'x265', '--dry-run'], { cwd: folder(true), env });
+    expect(bad.exitCode).toBe(2);
+    expect(bad.stdout).toContain("this target doesn't build x265");
+  });
+
   it('needs Docker', async () => {
     const r = await runCliAsync(['build', '--target', 'linux-x64'], { cwd: folder(true), env });
     expect(r.exitCode).toBe(2);

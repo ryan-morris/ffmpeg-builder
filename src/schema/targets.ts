@@ -27,7 +27,7 @@ export const folderSchema = z.strictObject({
   pin: pins,
   notify: z.strictObject({ 'new-ffmpeg': z.enum(['true', 'false'], { error: 'expected true or false' }).optional() }).optional(),
   'allow-removal': names, // components any target may lose since the last release
-  'nonfree-release': z.enum(['internal'], { error: 'expected internal' }).optional(), // nonfree builds published privately, acknowledged
+  'private-release': z.enum(['internal'], { error: 'expected internal' }).optional(), // releases go to a private repository, acknowledged
   targets: z.record(name, target, { error: 'expected targets: a name for each build, with platform, license and ffmpeg' }),
 });
 

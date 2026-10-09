@@ -1,0 +1,3 @@
+# Setup scripts define variables the driver and the recipes read after sourcing them (CMAKE_CROSS_ARGS,
+# MESON_CROSS_ARGS, ...), which shellcheck can't see.
+disable=SC2034

@@ -8,8 +8,9 @@ import type { EngineData } from '../engine-data.ts';
 import { LOCK_FILE, readFolderLock, type FolderLock } from '../lockfile.ts';
 import { packageRoot } from '../paths.ts';
 import { changesSince, planReleases, removals, type PlannedRelease, type TargetFacts } from '../release.ts';
-import { previousRelease, publishingRepo, type Previous } from '../release-remote.ts';
+import { previousReleases, publishingRepo, type Previous } from '../release-remote.ts';
 import type { Folder } from '../targets.ts';
+import { publishingProblems } from '../bundle.ts';
 import { FolderError, runFolderCheck } from './folder.ts';
 
 type Result = { output: string; exitCode: number };
@@ -42,17 +43,21 @@ export async function releaseRows(folder: Folder, data: EngineData, options: { o
   const previous = new Map<string, Previous | undefined>();
   const rows: ReleaseRow[] = [];
   for (const rel of releases) {
-    const prev = repo ? await previousRelease(repo, rel.base) : undefined;
-    previous.set(rel.base, prev);
-    const reasons = prev && !prev.manifest ? [`${prev.tag} has no manifest.yml (made before ffmpeg-build)`] : changesSince(rel, prev?.manifest);
+    const found = repo ? await previousReleases(repo, rel.group, rel.ffmpeg) : {};
+    // the build number counts within this FFmpeg version; what changed, and what disappeared, is judged against the
+    // release this one follows on from: the newest of the same group and FFmpeg major
+    const prev = found.sameBase;
+    const follows = found.lastInMajor;
+    previous.set(rel.base, follows);
+    const reasons = follows && !follows.manifest ? [`${follows.tag} has no manifest.yml (made before ffmpeg-build)`] : changesSince(rel, follows?.manifest);
     rows.push({
       tag: `${rel.base}.${prev ? prev.build + 1 : 0}`,
       group: rel.group,
       ffmpeg: rel.ffmpeg,
-      ...(prev ? { previous: prev.tag } : {}),
+      ...(follows ? { previous: follows.tag } : {}),
       due: reasons.length > 0,
       reasons,
-      removals: removals(rel, prev?.manifest, folder),
+      removals: removals(rel, follows?.manifest, folder),
       targets: rel.targets.map((t) => ({ name: t.target.name, platform: t.target.platform, runner: t.runner, cacheKey: cacheKey(t.target.platform, t.facts) })),
     });
   }
@@ -69,6 +74,13 @@ export async function runReleases(folder: Folder, data: EngineData, options: { j
   } catch (e) {
     if (e instanceof FetchError) throw new FolderError(`couldn't read the last releases: ${e.message} (--offline treats every release as new)`);
     throw e;
+  }
+  // where they'd be published must be able to take them, before anything is built (and uploaded as a CI artifact)
+  const repo = options.offline ? undefined : publishingRepo(folder.dir);
+  const refused = await publishingProblems(folder, folder.targets.map((t) => ({ name: t.name, license: t.license })), repo, { strict: false });
+  if (refused.length) {
+    if (options.json) return { output: JSON.stringify({ error: refused.join('\n') }, null, 2), exitCode: 1 };
+    return { output: refused.map((e) => `✗ ${e}`).join('\n'), exitCode: 1 };
   }
   const shown = options.due ? rows.filter((r) => r.due) : rows;
   const exitCode = shown.some((r) => r.removals.length) ? 1 : 0;

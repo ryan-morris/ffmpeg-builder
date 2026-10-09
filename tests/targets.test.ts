@@ -102,7 +102,7 @@ describe('the editor schema for ffmpeg-build.yml', () => {
 
   it('describes the top-level keys only, with no hosted $id', () => {
     const schema = JSON.parse(folderJsonSchema()) as { properties: Record<string, unknown>; additionalProperties: boolean };
-    expect(Object.keys(schema.properties).sort()).toEqual(['allow-removal', 'bases', 'nonfree-release', 'notify', 'pin', 'targets']);
+    expect(Object.keys(schema.properties).sort()).toEqual(['allow-removal', 'bases', 'notify', 'pin', 'private-release', 'targets']);
     expect(schema.additionalProperties).toBe(false);
     expect(schema).not.toHaveProperty('$id');
   });

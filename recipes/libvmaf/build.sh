@@ -3,7 +3,7 @@
 # Enables FFmpeg's vmaf filter. The meson project lives in the libvmaf/ subdirectory of the repo. Default prediction
 # models are compiled into the library (no runtime model files). C++ -- the C++ runtime is added to libvmaf.pc for
 # FFmpeg's static link.
-cd libvmaf     # meson project is in the libvmaf/ subdir
+cd libvmaf || exit 1 # meson project is in the libvmaf/ subdir
 # libvmaf bundles libsvm, whose src/svm.cpp defines a global
 #   template <class T> static inline void swap(T&, T&)
 # Because svm_node lives in the global namespace, ADL makes that a candidate alongside

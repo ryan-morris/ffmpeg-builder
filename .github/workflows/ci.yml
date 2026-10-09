@@ -13,6 +13,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -20,5 +22,7 @@ jobs:
       - run: npm ci
       - run: npx tsc -p tsconfig.json --noUnusedLocals --noUnusedParameters
       - run: npx vitest run
+      - name: shellcheck (recipes and platform scripts)
+        run: docker run --rm -v "${PWD}:/mnt" -w /mnt koalaman/shellcheck:v0.10.0@sha256:2097951f02e735b613f4a34de20c40f937a6c8f18ecb170612c88c34517221fb -S warning -s bash recipes/lib.sh recipes/*/build.sh platforms/*.sh platforms/setup/*.sh
       - name: actionlint
         run: docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 -color

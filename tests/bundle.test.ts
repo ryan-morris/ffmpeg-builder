@@ -140,6 +140,11 @@ describe('ffmpeg-build bundle', () => {
     expect(index).toContain(`| sources/dav1d/${dav1d.sha256.slice(0, 12)}/dav1d-1.5.4.tar.gz | ${dav1d.sha256} |`);
   });
 
+  it('refuses a build made with other patches than the folder has now', async () => {
+    const { dist, folder } = builtFolder(FOLDER, (_n, s) => { (s as unknown as { patches: unknown[] }).patches = [{ name: 'acme', sha256: 'ab'.repeat(32) }]; });
+    await expect(bundle(folder, data, LOCK, { tag: '9.1.0.0', dist, engineRoot: packageRoot })).rejects.toThrow('was built with other patches than the folder has now; build it again');
+  });
+
   it('names the release a tag must match', async () => {
     const { dist, folder } = builtFolder();
     await expect(bundle(folder, data, LOCK, { tag: '9.0.2.1', dist, engineRoot: packageRoot })).rejects.toThrow('no release 9.0.2 in this folder (it has 9.1.0)');
@@ -153,8 +158,8 @@ describe('ffmpeg-build bundle', () => {
     await expect(bundle(pub.folder, data, LOCK, { tag: '9.1.0.0', dist: pub.dist, engineRoot: packageRoot, repo: 'o/r' })).rejects.toThrow('dvr is nonfree: internal use only, never published to a public repository (o/r is public)');
     gh.private = true;
     const unacknowledged = builtFolder(nonfree);
-    await expect(bundle(unacknowledged.folder, data, LOCK, { tag: '9.1.0.0', dist: unacknowledged.dist, engineRoot: packageRoot, repo: 'o/r' })).rejects.toThrow('needs nonfree-release: internal');
-    const internal = builtFolder(`nonfree-release: internal\n${nonfree}`);
+    await expect(bundle(unacknowledged.folder, data, LOCK, { tag: '9.1.0.0', dist: unacknowledged.dist, engineRoot: packageRoot, repo: 'o/r' })).rejects.toThrow('Say that is intended with private-release: internal');
+    const internal = builtFolder(`private-release: internal\n${nonfree}`);
     await bundle(internal.folder, data, LOCK, { tag: '9.1.0.0', dist: internal.dist, engineRoot: packageRoot, repo: 'o/r' });
     const m = parseManifest(readFileSync(join(internal.dist, 'manifest.yml'), 'utf8'));
     expect(m.targets[0]!.redistributable).toBe('false');
