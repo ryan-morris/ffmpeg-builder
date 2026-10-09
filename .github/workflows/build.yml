@@ -172,6 +172,7 @@ jobs:
       cancel-in-progress: false
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }} # gh runs in the dist folder, which isn't a checkout
       TAG: ${{ matrix.release }}
     steps:
       - uses: actions/checkout@v7
