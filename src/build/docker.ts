@@ -76,13 +76,20 @@ export function mountArgs(m: { recipes: string; engine: string; cache: string; o
   ];
 }
 
+/** The user to hand the build's files back to: the host user on Linux, where a container's root files stay root's. */
+export function hostUserOf(platform = process.platform): { uid: number; gid: number } | undefined {
+  return platform === 'linux' && process.getuid && process.getgid ? { uid: process.getuid(), gid: process.getgid() } : undefined;
+}
+
 /**
  * The docker run that builds one plan: --init so Ctrl-C reaches the build (a bash pid 1 ignores it). `env` passes
  * variables into the container (the source repository and commit legal/SOURCE_OFFER.txt names).
  */
-export function dockerRunArgs(m: { tag: string; recipes: string; engine: string; cache: string; out: string; plan: string; env?: Record<string, string> }): string[] {
-  const { tag, env = {}, ...mounts } = m;
-  const envArgs = Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
+export function dockerRunArgs(m: { tag: string; recipes: string; engine: string; cache: string; out: string; plan: string; env?: Record<string, string>; hostUser?: { uid: number; gid: number } }): string[] {
+  const { tag, env = {}, hostUser = hostUserOf(), ...mounts } = m;
+  // the driver gives what it wrote back to this user (Linux hosts; Docker Desktop maps ownership itself)
+  const owner = hostUser ? { FFB_HOST_UID: String(hostUser.uid), FFB_HOST_GID: String(hostUser.gid) } : {};
+  const envArgs = Object.entries({ ...env, ...owner }).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
   return ['run', '--rm', '--init', ...envArgs, ...mountArgs(mounts), tag, 'bash', '/engine/driver.sh'];
 }
 

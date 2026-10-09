@@ -21,8 +21,8 @@ per platform is in `platforms/setup/<name>.sh`, used by the one build driver (`p
 built locally the first time, from `images/<name>/Dockerfile` (base images pinned by digest, downloads by sha256).
 
 Each library is cached under `~/.cache/ffmpeg-build` (`FFMPEG_BUILD_CACHE`), keyed by its recipe, version, platform,
-toolchain and the libraries it builds against, so a rebuild only compiles what changed. On Linux hosts the archives
-and cache files are written by the container's root user: you can delete them, but use `sudo` to edit them in place.
+toolchain and the libraries it builds against, so a rebuild only compiles what changed. On Linux hosts the build hands the archives
+and cache files back to your user when it ends (the container runs as root).
 
 ### arm64 Linux on an x64 host
 

@@ -2,7 +2,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { dockerRunArgs, imageTag, mountArgs, runStreaming } from '../src/build/docker.ts';
+import { dockerRunArgs, hostUserOf, imageTag, mountArgs, runStreaming } from '../src/build/docker.ts';
 import { cacheKeys, configureFlags, expandTemplate, makeBuildPlan, sourceOf, toolchainIdentity, verifyNames } from '../src/build/plan.ts';
 import { loadEngineData } from '../src/engine-data.ts';
 import type { LockedProfile } from '../src/lockfile.ts';
@@ -201,6 +201,13 @@ describe('review fixes', () => {
 
   it("puts the platform's setup in the plan", () => {
     expect(makeBuildPlan({ profile: dvr, data, locked: dvrLock, cell: linuxCell(dvr, dvrLock), variant: 'nonfree', imageId: 'x', cacheDir: tmpdir() }).setup).toBe('linux');
+  });
+
+  it("hands the build's files back to the host user on Linux, and nowhere else", () => {
+    const linux = dockerRunArgs({ tag: 'img:1', recipes: 'r', engine: 'e', cache: 'c', out: 'o', plan: 'p', hostUser: { uid: 1001, gid: 118 } });
+    expect(linux.join(' ')).toContain('-e FFB_HOST_UID=1001 -e FFB_HOST_GID=118');
+    expect(hostUserOf('win32')).toBeUndefined();
+    expect(hostUserOf('darwin')).toBeUndefined();
   });
 
   it('runs the driver with --init, so Ctrl-C stops the container', () => {

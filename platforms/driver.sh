@@ -24,6 +24,12 @@ CACHE="${FFB_CACHE:-/cache}"
 OUT="${FFB_OUT:-/out}"
 DEPS_DIR="${DEPS_DIR:-/opt/ffmpeg-build/deps}"
 WORK="${FFB_WORK:-/work}"
+
+# In a container the build runs as root; on a Linux host the cache and archives it writes would then be root's, which
+# the user (and CI's cache save) can't read back. Hand them back to the host user on the way out, whatever happened.
+if [ -n "${FFB_HOST_UID:-}" ]; then
+  trap 'chown -R "${FFB_HOST_UID}:${FFB_HOST_GID:-${FFB_HOST_UID}}" "${CACHE}" "${OUT}" 2>/dev/null || true' EXIT
+fi
 JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
 NAME="$(jq -r .name "${PLAN}")"
 RID="$(jq -r .platform "${PLAN}")"
