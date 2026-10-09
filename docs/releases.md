@@ -25,7 +25,9 @@ The engine ships reusable workflows (preview: they are being run end to end for 
   macOS, and the release (`bundle`, then a GitHub release with every asset). `publish: changed-only | always | never`;
   `never` is a pull-request check. One `all-builds` job to require.
 - **`update.yml`**: `ffmpeg-build update`, then one pull request on `ffmpeg-build/update` with the update summary.
-  `automerge: true` merges it when CI passes.
+  `automerge: true` merges it when CI passes. Opening the pull request needs either a `token` secret (a token whose
+  pushes also run your CI) or the repository setting *Allow GitHub Actions to create and approve pull requests*
+  (Settings, Actions, General); with only the latter, the PR's own CI doesn't start until someone pushes to it.
 - **`fetch-update.yml`**: for products (below).
 
 Copy-ready callers are in [`examples/workflows/`](../examples/workflows): a daily release train, a pull-request check,
