@@ -59,7 +59,8 @@ The engine ships reusable workflows (preview: each has been run end to end on th
   Opening the pull request needs the repository setting *Allow GitHub Actions to create and approve pull requests*
   (Settings, Actions, General), or a `token` secret.
 - **`fetch-update.yml`**: for products (below); the same PR handling.
-- **`automerge.yml`**: merges the PR of `update.yml` or `fetch-update.yml` with `automerge: true` once its CI passes.
+- **`automerge.yml`**: the last job of your CI; merges the PR of `update.yml` or `fetch-update.yml` with
+  `automerge: true` once the CI's other jobs pass.
 
 **The PR's CI starts without any token.** Pushes made with `GITHUB_TOKEN` start no workflows, so after pushing,
 `update.yml` and `fetch-update.yml` dispatch the CI workflow named by their `ci-workflow` input (default `ci.yml`;
@@ -69,9 +70,10 @@ whose pushes start CI by themselves (then nothing is dispatched).
 
 **Automerge needs no repository settings** (no auto-merge, branch protection or required checks, which free private
 repositories can't have). With `automerge: true` the PR is labelled `ffmpeg-build:automerge`; a workflow triggered by
-`workflow_run` (your CI's `completed` runs) calls `automerge.yml`, which merges the labelled `ffmpeg-build/` PR whose
-head is still the commit the passing run tested (`gh pr merge --squash --match-head-commit`). A merge made with
-`GITHUB_TOKEN` starts no workflows on the default branch; the scheduled release train picks it up.
+Your CI calls `automerge.yml` as its last job (`needs:` the build), which merges the labelled `ffmpeg-build/` PR
+whose head is still the commit the passing run tested (`gh pr merge --squash --match-head-commit`). A merge made with
+`GITHUB_TOKEN` starts no workflows on the default branch; the scheduled release train picks it up. (Not from a `workflow_run`
+workflow: CI runs started with `GITHUB_TOKEN` trigger none.)
 
 Each takes an `engine` input: the ffmpeg-build to run. A version installs that npm release (the default is the
 version `ffmpeg.lock` records); a git or npm spec (one with `:` or `/`) is installed from it, and `source` builds the

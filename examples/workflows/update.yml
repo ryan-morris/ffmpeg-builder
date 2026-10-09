@@ -1,5 +1,5 @@
 # A consumer's lock updates (copy into .github/workflows/): one PR with the update summary, merged when CI passes
-# (with automerge.yml). No token is needed: the workflow dispatches your CI (ci.yml, which needs workflow_dispatch:)
+# (ci.yml's last job, automerge.yml). No token is needed: the workflow dispatches your CI (ci.yml, which needs workflow_dispatch:)
 # on the PR's branch, since GITHUB_TOKEN's pushes start none. UPDATE_TOKEN is optional: a fine-grained token with
 # contents and pull-requests write, whose pushes start CI by themselves.
 name: update

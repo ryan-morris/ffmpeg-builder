@@ -248,7 +248,14 @@ jobs:
             [ "${draft}" = true ] || { echo "::error::${TAG} is already published; releases are never replaced"; exit 1; }
             gh release edit "${TAG}" --notes-file release-notes.md
           else
-            gh release create "${TAG}" --draft --title "${TAG}" --notes-file release-notes.md --target "${GITHUB_SHA}"
+            if ! gh release create "${TAG}" --draft --title "${TAG}" --notes-file release-notes.md --target "${GITHUB_SHA}"; then
+              # GITHUB_TOKEN can't tag a commit whose workflow files differ from the branch's tip (403)
+              tip="$(gh api "repos/${GH_REPO}/commits/${GITHUB_REF_NAME}" --jq .sha 2>/dev/null || true)"
+              if [ -n "${tip}" ] && [ "${tip}" != "${GITHUB_SHA}" ]; then
+                echo "::error::${GITHUB_REF_NAME} moved on to ${tip} while this run built ${GITHUB_SHA}; GitHub doesn't let GITHUB_TOKEN tag a commit whose workflow files differ from the branch's. The next release run releases it."
+              fi
+              exit 1
+            fi
           fi
           for f in $(jq -r '.assets[]' bundle.json); do
             for i in 1 2 3; do gh release upload "${TAG}" "${f}" --clobber && break; sleep $((i * 10)); done

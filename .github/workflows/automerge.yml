@@ -1,14 +1,15 @@
 # REUSABLE (preview). Merges an ffmpeg-build pull request (update.yml or fetch-update.yml with `automerge: true`) once
-# its CI passes, without depending on repository settings (auto-merge, branch protection, required checks). Call it
-# from a workflow triggered by the CI finishing:
+# its CI passes, without depending on repository settings (auto-merge, branch protection, required checks). Call it as
+# the last job of the CI workflow, after the jobs that must pass:
 #
-#   on:
-#     workflow_run:
-#       workflows: [ci]          # the CI workflows' names
-#       types: [completed]
+#   merge:
+#     needs: build
+#     uses: <engine repo>/.github/workflows/automerge.yml@<ref>
 #
-# It merges only the open PR whose branch is the run's, starts with ffmpeg-build/, carries the ffmpeg-build:automerge
-# label, and whose head is still the commit that run tested (a newer push is never merged untested).
+# (Not from a workflow_run workflow: the CI runs update.yml starts are started with GITHUB_TOKEN, and those trigger no
+# workflow_run.) It merges only the open PR whose branch is the run's, starts with ffmpeg-build/, carries the
+# ffmpeg-build:automerge label, and whose head is still the commit the run tested (a newer push is never merged untested).
+# Any other run (a person's pull request, a push) it leaves alone.
 name: automerge
 
 on:
@@ -20,17 +21,14 @@ permissions:
 
 jobs:
   merge:
-    if: >-
-      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      # the event's fields reach the script through env, never its text
-      BRANCH: ${{ github.event.workflow_run.head_branch }}
-      SHA: ${{ github.event.workflow_run.head_sha }}
+      # the run's branch and commit reach the script through env, never its text: a pull_request run's are its head's
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+      SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       LABEL: ffmpeg-build:automerge
     steps:
       - name: merge the labelled pull request the run tested

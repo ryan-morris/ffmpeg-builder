@@ -1,4 +1,5 @@
-# A consumer's pull-request check (copy into .github/workflows/): builds what the PR changes, publishes nothing.
+# A consumer's pull-request check (copy into .github/workflows/): builds what the PR changes, publishes nothing, and
+# merges ffmpeg-build's own PRs (update.yml with automerge: true) once the build passes.
 name: ci
 on:
   pull_request:
@@ -8,9 +9,13 @@ on:
 # the skipped release job) asking for more than the caller grants. Pull requests from forks get a read-only token anyway.
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   build:
     uses: devenvy/ffmpeg-build/.github/workflows/build.yml@v1
     with:
       publish: never
+  merge:
+    needs: build
+    uses: devenvy/ffmpeg-build/.github/workflows/automerge.yml@v1
