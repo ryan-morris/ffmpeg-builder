@@ -4,8 +4,10 @@ on:
   pull_request:
   workflow_dispatch: # update.yml starts it on its PR's branch (GITHUB_TOKEN's pushes start nothing)
 
+# contents: write although nothing is published: GitHub refuses to start a run whose called workflow has a job (here
+# the skipped release job) asking for more than the caller grants. Pull requests from forks get a read-only token anyway.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:

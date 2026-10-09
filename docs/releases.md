@@ -52,7 +52,9 @@ The engine ships reusable workflows (preview: each has been run end to end on th
 - **`build.yml`**: plan (`releases --json`), then each target of each due release on its runner (`platforms.yml`
   `runner:`; Linux images through buildx and the Actions cache, the library cache per target), the iOS bundle on
   macOS, and the release (`bundle`, then a GitHub release with every asset). `publish: changed-only | always | never`;
-  `never` is a pull-request check. One `all-builds` job to require.
+  `never` is a pull-request check. One `all-builds` job to require. Its caller grants `contents: write` even with
+  `never`: GitHub won't start a run whose called workflow has a job (the skipped release job) asking for more than
+  the caller grants.
 - **`update.yml`**: `ffmpeg-build update`, then one pull request on `ffmpeg-build/update` with the update summary.
   Opening the pull request needs the repository setting *Allow GitHub Actions to create and approve pull requests*
   (Settings, Actions, General), or a `token` secret.
