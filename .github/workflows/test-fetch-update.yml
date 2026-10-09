@@ -1,0 +1,17 @@
+# The engine's test of the reusable fetch-update workflow: moves examples/product/ffmpeg.version to the newest test
+# release with the target, and opens (or refreshes) one pull request. Run it by hand.
+name: test-fetch-update
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    uses: ./.github/workflows/fetch-update.yml
+    with:
+      pin-file: examples/product/ffmpeg.version
+      target: linux-x64-lgplv3
+      engine: source

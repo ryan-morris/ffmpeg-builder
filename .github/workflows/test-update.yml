@@ -1,0 +1,16 @@
+# The engine's test of the reusable update workflow: updates examples/test-builds/ffmpeg.lock from upstream and opens
+# (or refreshes) one pull request, running the engine from this repository's source. Run it by hand.
+name: test-update
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    uses: ./.github/workflows/update.yml
+    with:
+      folder: examples/test-builds
+      engine: source

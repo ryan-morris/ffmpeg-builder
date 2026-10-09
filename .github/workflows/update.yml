@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
       engine:
-        description: ffmpeg-build version to run (default the one ffmpeg.lock records)
+        description: ffmpeg-build version to run (default the one ffmpeg.lock records; "source" builds this repository)
         type: string
         default: ''
     secrets:
@@ -44,6 +44,7 @@ jobs:
         env:
           WANTED: ${{ inputs.engine }}
         run: |
+          if [ "${WANTED}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); exit 0; fi
           npm install --global "ffmpeg-build@${WANTED:-$(sed -n 's/^engine: *//p' ffmpeg.lock | head -1)}"
       - name: update
         working-directory: ${{ inputs.folder }}

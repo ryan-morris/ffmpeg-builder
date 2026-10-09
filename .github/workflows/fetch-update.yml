@@ -14,7 +14,7 @@ on:
         type: string
         required: true
       engine:
-        description: ffmpeg-build version to run
+        description: ffmpeg-build version to run ("source" builds this repository)
         type: string
         default: latest
     secrets:
@@ -42,7 +42,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - run: npm install --global "ffmpeg-build@${{ inputs.engine }}"
+      - name: engine
+        env:
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
       - name: newer release?
         id: bump
         env:
