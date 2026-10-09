@@ -165,7 +165,12 @@ jobs:
       # runs the rest
       - name: qemu for 32-bit ARM (linux-armhf runs in a Debian armhf container)
         if: inputs.tests != 'none' && matrix.platform == 'linux-armhf'
-        run: docker run --privileged --rm tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f --install arm
+        env:
+          BINFMT: tonistiigi/binfmt:qemu-v8.1.5@sha256:2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f
+        run: |
+          # Docker Hub rate-limits anonymous pulls from shared runner addresses now and then: retry before giving up
+          for i in 1 2 3 4; do docker pull --quiet "${BINFMT}" && break; [ "$i" = 4 ] && exit 1; sleep $((i * 30)); done
+          docker run --privileged --rm "${BINFMT}" --install arm
       - name: Rosetta (x86_64 builds run under it on Apple silicon)
         if: inputs.tests != 'none' && runner.os == 'macOS' && endsWith(matrix.platform, '-x64')
         run: sudo softwareupdate --install-rosetta --agree-to-license
