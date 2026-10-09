@@ -207,6 +207,12 @@ describe("THIRD-PARTY-NOTICES.txt's header and SOURCE section", () => {
 
   it('names a release sources archive by its URL, and the build definition as a link to the commit', () => {
     const text = noticesSource({ ...base, release: '9.0.2.4', repository: 'devenvy/ffmpeg', source: { repo: 'https://github.com/devenvy/ffmpeg', ref: 'abc123' } });
+    // a release points at what it publishes: the list of sources is SOURCES.md in its sources archive
+    expect(text).toContain('SOURCES.md in ');
+    expect(text).not.toContain('.sources.json');
+    expect(text).toContain('unmodified upstream');
+    expect(noticesSource({ ...base, release: '9.0.2.4', repository: 'devenvy/ffmpeg', source: {}, patchSets: ['acme-muxer'] }))
+      .toContain('upstream release, modified by the patch sets acme-muxer (in the sources archive)');
     expect(text).toContain('  https://github.com/devenvy/ffmpeg/releases/download/9.0.2.4/ffmpeg-9.0.2-sources.tar.gz\n');
     expect(text).toContain('holds the complete corresponding source for this build');
     expect(text).toContain('Build definition: https://github.com/devenvy/ffmpeg/tree/abc123\n');

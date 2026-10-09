@@ -318,7 +318,7 @@ function atCommit(repo: string, ref: string): string {
  * request: a release names its sources archive by URL; an unreleased build says where its source is recorded and that
  * it must be published with that archive before it is distributed.
  */
-export function noticesSource(a: { name: string; version: string; license: License; release?: string; repository?: string; sourcesArchive: string; source: BuildSource; ffmpegTarball: string }): string {
+export function noticesSource(a: { name: string; version: string; license: License; release?: string; repository?: string; sourcesArchive: string; source: BuildSource; ffmpegTarball: string; patchSets?: string[] }): string {
   const lines: string[] = [];
   if (a.release && a.repository) {
     lines.push(
@@ -346,9 +346,12 @@ export function noticesSource(a: { name: string; version: string; license: Licen
   lines.push('');
   lines.push(
     `Build definition: ${a.source.repo && a.source.ref ? atCommit(a.source.repo, a.source.ref) : a.source.repo ?? 'not recorded (the build had no FFMPEG_BUILD_SOURCE_REPO and no git remote)'}`,
-    `FFmpeg ${a.version}, unmodified upstream: ${a.ffmpegTarball}`,
+    a.patchSets?.length
+      ? `FFmpeg ${a.version}, upstream release, modified by the patch sets ${a.patchSets.join(', ')} (in the sources archive): ${a.ffmpegTarball}`
+      : `FFmpeg ${a.version}, unmodified upstream: ${a.ffmpegTarball}`,
     'Each component below names its upstream origin, exact version and commit, so it can also be fetched from upstream',
-    `directly. ${a.name}.sources.json lists every source with its sha256.`,
+    // a release publishes the list inside its sources archive; an unreleased build has it beside its archives
+    a.release ? `directly. SOURCES.md in ${a.sourcesArchive} lists every source with its sha256.` : `directly. ${a.name}.sources.json lists every source with its sha256.`,
     '',
     'Everything is public; no request to the distributor is necessary to obtain it.',
   );
@@ -416,7 +419,7 @@ export function makeBuildPlan(args: {
       governing: GOVERNING_TEXTS[license],
       header: noticesHeader({ version, target: args.variant, platform, engine, licence: licenseNotice(data, cell), patches }),
       build: noticesBuild({ platform, setup, image, toolchain: args.imageId }),
-      source: noticesSource({ name, version, license, ...(args.release ? { release: args.release } : {}), ...(args.repository ? { repository: args.repository } : {}), sourcesArchive, source: args.source ?? {}, ffmpegTarball: archives[0]! }),
+      source: noticesSource({ name, version, license, ...(args.release ? { release: args.release } : {}), ...(args.repository ? { repository: args.repository } : {}), sourcesArchive, source: args.source ?? {}, ffmpegTarball: archives[0]!, patchSets: profile.patches.map((p) => basename(p)) }),
     },
     ffmpeg: {
       version,
