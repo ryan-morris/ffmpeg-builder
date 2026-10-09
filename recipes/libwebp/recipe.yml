@@ -1,0 +1,9 @@
+name: libwebp
+provides: webp
+license: BSD-3-Clause
+license-files: [COPYING, PATENTS]
+configure: [--enable-libwebp]
+source: { git: https://chromium.googlesource.com/webm/libwebp.git, ref: "v{version}", mirror: https://github.com/webmproject/libwebp.git }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+# Not android-* / ios-* / maccatalyst-*: upstream drops it there (image-only codec, not needed for mobile decode).
+platforms: [linux-*, osx-*, win-*]

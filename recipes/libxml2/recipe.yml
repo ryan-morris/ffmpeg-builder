@@ -1,0 +1,9 @@
+name: libxml2
+provides: xml2
+license: MIT
+license-files: [Copyright]
+configure: [--enable-libxml2]
+needs: [zlib]
+source: { git: https://github.com/GNOME/libxml2, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

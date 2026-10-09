@@ -1,0 +1,18 @@
+# One grouped pull request a week per ecosystem: the engine's npm packages (3 runtime, the rest for development) and
+# the actions its workflows use.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ['*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

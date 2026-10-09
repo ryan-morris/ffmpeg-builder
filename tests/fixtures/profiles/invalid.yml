@@ -1,0 +1,6 @@
+name: Invalid Name
+ffmpeg: nine
+platforms: [freebsd-x64]
+license: gplv3
+start: everything
+extends: base

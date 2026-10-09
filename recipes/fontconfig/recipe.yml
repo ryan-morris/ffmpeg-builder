@@ -1,0 +1,14 @@
+name: fontconfig
+provides: fontconfig
+license: HPND-sell-variant AND MIT-Modern-Variant AND MIT AND Unicode-DFS-2016
+license-files: [COPYING]
+configure: [--enable-libfontconfig]
+needs: [freetype, libexpat]
+# gitlab.freedesktop.org returned 502/503/504 on every clone for hours on 2026-09-30/10-01. fontconfig's GitHub repo
+# is a read-only mirror carrying every freedesktop tag at identical commits (upstream devenvy #45).
+source: { git: https://gitlab.freedesktop.org/fontconfig/fontconfig.git, ref: "{version}", mirror: https://github.com/fontconfig/fontconfig.git }
+# x.y.9x tags are development snapshots for the next minor.
+versions: { git-tags: '^(\d+\.\d+\.(?:\d|[0-8]\d))$' }
+# Not on Windows (needs a runtime fonts.conf for no real gain: libass uses DirectWrite, drawtext uses fontfile=),
+# Android, iOS or Mac Catalyst.
+platforms: [linux-*, osx-*]

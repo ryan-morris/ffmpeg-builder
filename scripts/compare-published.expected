@@ -1,0 +1,204 @@
+# Differences scripts/compare-published.sh expects between an ffmpeg-build archive and the published devenvy/ffmpeg
+# one, per platform: "<platform> <section> <diff line>", where the section is files, links, flags, encoders,
+# decoders, filters, formats, protocols, hwaccels, bsfs or deps, and the diff line starts with - (published) or
+# + (built). legal/ differences are listed per build instead, "<platform>-<license> legal <diff line>": they differ
+# by licence. Each group says why. Anything not listed here fails the comparison.
+
+# The Vulkan loader's development link: ffmpeg-build keeps the loader's own chain (libvulkan.so -> libvulkan.so.1 ->
+# libvulkan.so.1.4.363); upstream pointed it at the file. Programs load libvulkan.so.1 (the soname) either way.
+linux-x64 links -libvulkan.so -> libvulkan.so.1.4.363
+linux-x64 links +libvulkan.so -> libvulkan.so.1
+linux-musl-x64 links -libvulkan.so -> libvulkan.so.1.4.363
+linux-musl-x64 links +libvulkan.so -> libvulkan.so.1
+linux-arm64 links -libvulkan.so -> libvulkan.so.1.4.363
+linux-arm64 links +libvulkan.so -> libvulkan.so.1
+linux-musl-arm64 links -libvulkan.so -> libvulkan.so.1.4.363
+linux-musl-arm64 links +libvulkan.so -> libvulkan.so.1
+
+# Libraries that use no C++ library take the compiler helpers (__multf3, __divti3, ...) from the static libgcc here;
+# upstream's link (its global --extra-libs carried -lstdc++) took them from libgcc_s.so.1. One run-time library fewer.
+linux-arm64 deps -libavutil.so.61.1.102: soname=libavutil.so.61 needs=libc.so.6 libdl.so.2 libgcc_s.so.1 libm.so.6 libpthread.so.0 rpath=$ORIGIN
+linux-arm64 deps +libavutil.so.61.1.102: soname=libavutil.so.61 needs=libc.so.6 libdl.so.2 libm.so.6 libpthread.so.0 rpath=$ORIGIN
+linux-arm64 deps -libswscale.so.10.1.102: soname=libswscale.so.10 needs=libavutil.so.61 libc.so.6 libgcc_s.so.1 libm.so.6 libpthread.so.0 rpath=$ORIGIN
+linux-arm64 deps +libswscale.so.10.1.102: soname=libswscale.so.10 needs=libavutil.so.61 libc.so.6 libm.so.6 libpthread.so.0 rpath=$ORIGIN
+linux-armhf deps -libavutil.so.61.1.102: soname=libavutil.so.61 needs=libc.so.6 libgcc_s.so.1 libm.so.6 rpath=$ORIGIN
+linux-armhf deps +libavutil.so.61.1.102: soname=libavutil.so.61 needs=libc.so.6 libm.so.6 rpath=$ORIGIN
+linux-armhf deps -libswresample.so.7.1.102: soname=libswresample.so.7 needs=libavutil.so.61 libc.so.6 libgcc_s.so.1 libm.so.6 rpath=$ORIGIN
+linux-armhf deps +libswresample.so.7.1.102: soname=libswresample.so.7 needs=libavutil.so.61 libc.so.6 libm.so.6 rpath=$ORIGIN
+linux-armhf deps -libswscale.so.10.1.102: soname=libswscale.so.10 needs=libavutil.so.61 libc.so.6 libgcc_s.so.1 libm.so.6 rpath=$ORIGIN
+linux-armhf deps +libswscale.so.10.1.102: soname=libswscale.so.10 needs=libavutil.so.61 libc.so.6 libm.so.6 rpath=$ORIGIN
+
+# linux-x64-lgplv3 legal/: upstream named each folder after the library's work folder (ogg, vorbis, lame-4.0, Vulkan-Headers, ...);
+# ffmpeg-build names it after the recipe.
+linux-x64-lgplv3 legal -legal/licenses/SPIRV-Headers-ggml/LICENSE
+linux-x64-lgplv3 legal -legal/licenses/Vulkan-Headers/LICENSE.md
+linux-x64-lgplv3 legal -legal/licenses/Vulkan-Loader/LICENSE.txt
+linux-x64-lgplv3 legal -legal/licenses/gsm-1.0-pl24/COPYRIGHT
+linux-x64-lgplv3 legal -legal/licenses/lame-4.0/COPYING
+linux-x64-lgplv3 legal -legal/licenses/lame-4.0/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/libgsm/COPYRIGHT
+linux-x64-lgplv3 legal +legal/licenses/libmp3lame/COPYING
+linux-x64-lgplv3 legal +legal/licenses/libmp3lame/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/libogg/COPYING
+linux-x64-lgplv3 legal +legal/licenses/libvmaf/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/libvorbis/COPYING
+linux-x64-lgplv3 legal -legal/licenses/mbedtls-3.6.7/LICENSE
+linux-x64-lgplv3 legal -legal/licenses/ogg/COPYING
+linux-x64-lgplv3 legal -legal/licenses/opencore-amr-0.1.6/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/mbedtls/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/opencore-amr/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/spirv-headers/LICENSE
+linux-x64-lgplv3 legal -legal/licenses/vmaf/LICENSE
+linux-x64-lgplv3 legal -legal/licenses/vo-amrwbenc-0.1.3/COPYING
+linux-x64-lgplv3 legal -legal/licenses/vorbis/COPYING
+linux-x64-lgplv3 legal +legal/licenses/vo-amrwbenc/COPYING
+linux-x64-lgplv3 legal +legal/licenses/vulkan-headers/LICENSE.md
+linux-x64-lgplv3 legal +legal/licenses/vulkan-loader/LICENSE.txt
+
+# linux-x64-lgplv3 legal/: upstream flattened what it found two levels deep; ffmpeg-build keeps each declared file's path in the source
+# (and declares the SPIRV-Headers licence of the sources shaderc syncs into third_party/).
+linux-x64-lgplv3 legal -legal/licenses/shaderc/LICENSE.glslang
+linux-x64-lgplv3 legal -legal/licenses/shaderc/LICENSE.spirv-tools
+linux-x64-lgplv3 legal +legal/licenses/shaderc/third_party/LICENSE.glslang
+linux-x64-lgplv3 legal +legal/licenses/shaderc/third_party/LICENSE.spirv-tools
+linux-x64-lgplv3 legal +legal/licenses/shaderc/third_party/spirv-headers/LICENSE
+
+# linux-x64-lgplv3 legal/: upstream copied every COPYING*/LICENSE*/COPYRIGHT* in the top two levels of the work folder, so it also shipped
+# Debian packaging (debian/copyright), a test framework's licence (kvazaar's greatest), a lint config (shaderc's
+# license-checker.cfg) and files its builds wrote there (libjxl's LICENSE.jpeg-xl, openjpeg's LICENSE.txt, soxr's
+# COPYING: none is in the library's source at the parity version). ffmpeg-build ships what each recipe declares.
+linux-x64-lgplv3 legal -legal/licenses/highway/copyright
+linux-x64-lgplv3 legal -legal/licenses/kvazaar/LICENSE.EXT.greatest
+linux-x64-lgplv3 legal -legal/licenses/lame-4.0/copyright
+linux-x64-lgplv3 legal -legal/licenses/libjxl/LICENSE.jpeg-xl
+linux-x64-lgplv3 legal -legal/licenses/libjxl/copyright
+linux-x64-lgplv3 legal -legal/licenses/openjpeg/LICENSE.txt
+linux-x64-lgplv3 legal -legal/licenses/shaderc/license-checker.cfg
+linux-x64-lgplv3 legal -legal/licenses/soxr/COPYING
+linux-x64-lgplv3 legal -legal/licenses/vorbis/copyright
+
+# linux-x64-lgplv3 legal/: declared by the recipes beyond upstream's search: patent grants (PATENTS), Apache-2.0 NOTICE files,
+# LICENSES/ texts, licences of third-party code compiled into the library (aom, libvpx, svtav1, libplacebo, harfbuzz),
+# texts upstream's search missed (freetype's FTL.TXT, soxr's LICENCE, libexpat's expat/COPYING) and the MIT notices
+# kept beside the recipes of the header-only nv-codec and libdrm, which upstream didn't ship.
+linux-x64-lgplv3 legal +legal/licenses/aom/PATENTS
+linux-x64-lgplv3 legal +legal/licenses/aom/third_party/fastfeat/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/aom/third_party/vector/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/aom/third_party/x86inc/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/freetype/docs/FTL.TXT
+linux-x64-lgplv3 legal +legal/licenses/harfbuzz/src/ms-use/COPYING
+linux-x64-lgplv3 legal +legal/licenses/kissfft/LICENSES/BSD-3-Clause
+linux-x64-lgplv3 legal +legal/licenses/kissfft/LICENSES/Unlicense
+linux-x64-lgplv3 legal +legal/licenses/libdrm/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/libexpat/expat/COPYING
+linux-x64-lgplv3 legal +legal/licenses/libjxl/PATENTS
+linux-x64-lgplv3 legal +legal/licenses/libplacebo/3rdparty/fast_float/LICENSE-APACHE
+linux-x64-lgplv3 legal +legal/licenses/libplacebo/3rdparty/fast_float/LICENSE-BOOST
+linux-x64-lgplv3 legal +legal/licenses/libplacebo/3rdparty/fast_float/LICENSE-MIT
+linux-x64-lgplv3 legal +legal/licenses/libplacebo/3rdparty/glad/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/libvpx/PATENTS
+linux-x64-lgplv3 legal +legal/licenses/libvpx/third_party/x86inc/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/libwebp/PATENTS
+linux-x64-lgplv3 legal +legal/licenses/nv-codec/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/opencore-amr/opencore/NOTICE
+linux-x64-lgplv3 legal +legal/licenses/soxr/LICENCE
+linux-x64-lgplv3 legal +legal/licenses/spirv-headers/LICENSES/MIT.txt
+linux-x64-lgplv3 legal +legal/licenses/svtav1/PATENTS.md
+linux-x64-lgplv3 legal +legal/licenses/svtav1/third_party/fastfeat/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/svtav1/third_party/safestringlib/LICENSE
+linux-x64-lgplv3 legal +legal/licenses/vo-amrwbenc/NOTICE
+linux-x64-lgplv3 legal +legal/licenses/vo-amrwbenc/amrwbenc/NOTICE
+linux-x64-lgplv3 legal +legal/licenses/vo-amrwbenc/common/NOTICE
+linux-x64-lgplv3 legal +legal/licenses/vulkan-headers/LICENSES/Apache-2.0.txt
+linux-x64-lgplv3 legal +legal/licenses/vulkan-headers/LICENSES/MIT.txt
+linux-x64-lgplv3 legal +legal/licenses/vulkan-loader/LICENSES/Apache-2.0.txt
+linux-x64-lgplv3 legal +legal/licenses/vulkan-loader/LICENSES/HPND-Kevlin-Henney.txt
+linux-x64-lgplv3 legal +legal/licenses/vulkan-loader/LICENSES/MIT-Khronos-old.txt
+linux-x64-lgplv3 legal +legal/licenses/vulkan-loader/LICENSES/MIT.txt
+
+# win-x64-lgplv3 legal/: upstream named each folder after the library's work folder (ogg, vorbis, lame-4.0, Vulkan-Headers, ...);
+# ffmpeg-build names it after the recipe.
+win-x64-lgplv3 legal -legal/licenses/AMF/LICENSE.txt
+win-x64-lgplv3 legal -legal/licenses/SPIRV-Headers-ggml/LICENSE
+win-x64-lgplv3 legal -legal/licenses/Vulkan-Headers/LICENSE.md
+win-x64-lgplv3 legal -legal/licenses/Vulkan-Shim-Loader/LICENSE.md
+win-x64-lgplv3 legal +legal/licenses/amf/LICENSE.txt
+win-x64-lgplv3 legal -legal/licenses/gsm-1.0-pl24/COPYRIGHT
+win-x64-lgplv3 legal -legal/licenses/lame-4.0/COPYING
+win-x64-lgplv3 legal -legal/licenses/lame-4.0/LICENSE
+win-x64-lgplv3 legal +legal/licenses/libgsm/COPYRIGHT
+win-x64-lgplv3 legal +legal/licenses/libmp3lame/COPYING
+win-x64-lgplv3 legal +legal/licenses/libmp3lame/LICENSE
+win-x64-lgplv3 legal +legal/licenses/libogg/COPYING
+win-x64-lgplv3 legal +legal/licenses/libvmaf/LICENSE
+win-x64-lgplv3 legal +legal/licenses/libvorbis/COPYING
+win-x64-lgplv3 legal -legal/licenses/mbedtls-3.6.7/LICENSE
+win-x64-lgplv3 legal -legal/licenses/ogg/COPYING
+win-x64-lgplv3 legal -legal/licenses/opencore-amr-0.1.6/LICENSE
+win-x64-lgplv3 legal +legal/licenses/mbedtls/LICENSE
+win-x64-lgplv3 legal +legal/licenses/opencore-amr/LICENSE
+win-x64-lgplv3 legal +legal/licenses/spirv-headers/LICENSE
+win-x64-lgplv3 legal -legal/licenses/vmaf/LICENSE
+win-x64-lgplv3 legal -legal/licenses/vo-amrwbenc-0.1.3/COPYING
+win-x64-lgplv3 legal -legal/licenses/vorbis/COPYING
+win-x64-lgplv3 legal +legal/licenses/vo-amrwbenc/COPYING
+win-x64-lgplv3 legal +legal/licenses/vulkan-headers/LICENSE.md
+win-x64-lgplv3 legal +legal/licenses/vulkan-shim/LICENSE
+
+# win-x64-lgplv3 legal/: upstream flattened what it found two levels deep; ffmpeg-build keeps each declared file's path in the source
+# (and declares the SPIRV-Headers licence of the sources shaderc syncs into third_party/).
+win-x64-lgplv3 legal -legal/licenses/shaderc/LICENSE.glslang
+win-x64-lgplv3 legal -legal/licenses/shaderc/LICENSE.spirv-tools
+win-x64-lgplv3 legal +legal/licenses/shaderc/third_party/LICENSE.glslang
+win-x64-lgplv3 legal +legal/licenses/shaderc/third_party/LICENSE.spirv-tools
+win-x64-lgplv3 legal +legal/licenses/shaderc/third_party/spirv-headers/LICENSE
+
+# win-x64-lgplv3 legal/: upstream copied every COPYING*/LICENSE*/COPYRIGHT* in the top two levels of the work folder, so it also shipped
+# Debian packaging (debian/copyright), a test framework's licence (kvazaar's greatest), a lint config (shaderc's
+# license-checker.cfg) and files its builds wrote there (libjxl's LICENSE.jpeg-xl, openjpeg's LICENSE.txt, soxr's
+# COPYING: none is in the library's source at the parity version). ffmpeg-build ships what each recipe declares.
+win-x64-lgplv3 legal -legal/licenses/Vulkan-Shim-Loader/LICENSE
+win-x64-lgplv3 legal -legal/licenses/highway/copyright
+win-x64-lgplv3 legal -legal/licenses/kvazaar/LICENSE.EXT.greatest
+win-x64-lgplv3 legal -legal/licenses/lame-4.0/copyright
+win-x64-lgplv3 legal -legal/licenses/libjxl/LICENSE.jpeg-xl
+win-x64-lgplv3 legal -legal/licenses/libjxl/copyright
+win-x64-lgplv3 legal -legal/licenses/openjpeg/LICENSE.txt
+win-x64-lgplv3 legal -legal/licenses/shaderc/license-checker.cfg
+win-x64-lgplv3 legal -legal/licenses/soxr/COPYING
+win-x64-lgplv3 legal -legal/licenses/vorbis/copyright
+
+# win-x64-lgplv3 legal/: declared by the recipes beyond upstream's search: patent grants (PATENTS), Apache-2.0 NOTICE files,
+# LICENSES/ texts, licences of third-party code compiled into the library (aom, libvpx, svtav1, libplacebo, harfbuzz),
+# texts upstream's search missed (freetype's FTL.TXT, soxr's LICENCE, libexpat's expat/COPYING) and the MIT notices
+# kept beside the recipes of the header-only nv-codec and libdrm, which upstream didn't ship.
+win-x64-lgplv3 legal +legal/licenses/aom/PATENTS
+win-x64-lgplv3 legal +legal/licenses/aom/third_party/fastfeat/LICENSE
+win-x64-lgplv3 legal +legal/licenses/aom/third_party/vector/LICENSE
+win-x64-lgplv3 legal +legal/licenses/aom/third_party/x86inc/LICENSE
+win-x64-lgplv3 legal +legal/licenses/freetype/docs/FTL.TXT
+win-x64-lgplv3 legal +legal/licenses/harfbuzz/src/ms-use/COPYING
+win-x64-lgplv3 legal +legal/licenses/kissfft/LICENSES/BSD-3-Clause
+win-x64-lgplv3 legal +legal/licenses/kissfft/LICENSES/Unlicense
+win-x64-lgplv3 legal +legal/licenses/libjxl/PATENTS
+win-x64-lgplv3 legal +legal/licenses/libplacebo/3rdparty/fast_float/LICENSE-APACHE
+win-x64-lgplv3 legal +legal/licenses/libplacebo/3rdparty/fast_float/LICENSE-BOOST
+win-x64-lgplv3 legal +legal/licenses/libplacebo/3rdparty/fast_float/LICENSE-MIT
+win-x64-lgplv3 legal +legal/licenses/libplacebo/3rdparty/glad/LICENSE
+win-x64-lgplv3 legal +legal/licenses/libvpx/PATENTS
+win-x64-lgplv3 legal +legal/licenses/libvpx/third_party/x86inc/LICENSE
+win-x64-lgplv3 legal +legal/licenses/libwebp/PATENTS
+win-x64-lgplv3 legal +legal/licenses/nv-codec/LICENSE
+win-x64-lgplv3 legal +legal/licenses/opencore-amr/opencore/NOTICE
+win-x64-lgplv3 legal +legal/licenses/soxr/LICENCE
+win-x64-lgplv3 legal +legal/licenses/spirv-headers/LICENSES/MIT.txt
+win-x64-lgplv3 legal +legal/licenses/svtav1/PATENTS.md
+win-x64-lgplv3 legal +legal/licenses/svtav1/third_party/fastfeat/LICENSE
+win-x64-lgplv3 legal +legal/licenses/svtav1/third_party/safestringlib/LICENSE
+win-x64-lgplv3 legal +legal/licenses/vo-amrwbenc/NOTICE
+win-x64-lgplv3 legal +legal/licenses/vo-amrwbenc/amrwbenc/NOTICE
+win-x64-lgplv3 legal +legal/licenses/vo-amrwbenc/common/NOTICE
+win-x64-lgplv3 legal +legal/licenses/vulkan-headers/LICENSES/Apache-2.0.txt
+win-x64-lgplv3 legal +legal/licenses/vulkan-headers/LICENSES/MIT.txt
+win-x64-lgplv3 legal +legal/licenses/vulkan-shim/Vulkan-Headers/LICENSE.md
+

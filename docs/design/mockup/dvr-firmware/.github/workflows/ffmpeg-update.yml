@@ -1,0 +1,15 @@
+# Nightly: is there a newer release of the same profile (dvr-*) in the same FFmpeg series?
+# If so, open a PR bumping ffmpeg.version; this repo's CI tests the product against it.
+name: FFmpeg update
+on:
+  schedule:
+    - cron: "11 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  bump:
+    uses: devenvy/ffmpeg-build/.github/workflows/fetch-update.yml@v1
+    with:
+      pin-file: ffmpeg.version
+    secrets:
+      token: ${{ secrets.FFMPEG_READ_TOKEN }}

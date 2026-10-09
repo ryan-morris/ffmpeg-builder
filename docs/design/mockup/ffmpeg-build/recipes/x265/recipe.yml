@@ -1,0 +1,15 @@
+# The facts about x265. Note what is NOT here: any version. The consumer's lock picks the
+# version; `ffmpeg-build update` finds new ones by asking upstream, using `versions:`.
+name: x265
+provides: x265                    # the name profiles use in with / without / pin
+license: GPL-2.0-or-later         # excluded automatically from LGPL builds
+configure: [--enable-libx265]
+
+source:
+  git: https://github.com/Multicorewareinc/x265
+  ref: "{version}"
+
+versions:
+  git-tags: '^(\d+\.\d+)$'        # 4.2, 4.3 ...
+
+platforms: all

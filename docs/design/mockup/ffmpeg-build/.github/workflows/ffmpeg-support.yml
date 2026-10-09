@@ -1,0 +1,23 @@
+# Nightly and stateless: regenerate ffmpeg/*.yml from scratch for every FFmpeg release of the
+# majors we handle, then compare with what is committed. Nothing records "last version checked";
+# a missed night is simply caught the next night.
+name: FFmpeg support
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: npx ffmpeg-build-dev regenerate-ffmpeg-data   # fetches each release's configure (seconds)
+      - id: diff
+        run: git diff --quiet -- ffmpeg/ || echo "changed=true" >> "$GITHUB_OUTPUT"
+      # Pure data (new built-in options, since/min markers, options for libraries we already have
+      # recipes for, removals) -> PR that auto-merges when CI is green, then a CLI patch release.
+      # An option needing a library with NO recipe -> PR with a scaffold, never auto-merged:
+      # adding a new upstream is a trust decision a person makes.
+      - if: steps.diff.outputs.changed == 'true'
+        run: npx ffmpeg-build-dev open-support-pr     # see examples/ffmpeg-support-pr.md

@@ -1,0 +1,8 @@
+name: fdk-aac
+provides: fdk-aac
+license: FDK-AAC
+license-files: [COPYING]
+configure: [--enable-libfdk-aac]
+source: { git: https://github.com/mstorsjo/fdk-aac, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

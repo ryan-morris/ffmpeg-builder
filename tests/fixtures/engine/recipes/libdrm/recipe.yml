@@ -1,0 +1,6 @@
+name: libdrm
+license: MIT
+license-files: [COPYING]
+source: { git: https://gitlab.freedesktop.org/mesa/drm.git, ref: "libdrm-{version}" }
+versions: { git-tags: '^libdrm-(\d+\.\d+\.\d+)$' }
+platforms: [linux-*]

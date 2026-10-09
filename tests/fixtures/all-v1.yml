@@ -1,0 +1,96 @@
+# The old matrix profile devenvy/ffmpeg's builds were written as, before targets: kept as the fixture that
+# tests/migrate.test.ts migrates and proves equivalent. profiles/devenvy.yml (targets) is what ships now.
+name: all
+ffmpeg: [8, 9]
+platforms: all
+license: [gplv3, gplv2, lgplv3, lgplv2]
+with:
+  # TLS: one per build. lgplv2 lists none on Linux/Android: no TLS library's license allows it there.
+  - schannel:        { platforms: [win-*] }
+  - securetransport: { platforms: [osx-*, ios-*] }
+  - openssl:         { platforms: [linux-*, android-*, maccatalyst-*], license: [lgplv3, gplv3, nonfree] }
+  - gnutls:          { platforms: [linux-*, android-*, maccatalyst-*], license: [gplv2] }
+
+  # hardware
+  - nvenc
+  - vaapi
+  - drm
+  - vpl
+  - d3d11va:         { platforms: [win-*] }
+  - dxva2:           { platforms: [win-*] }
+  - mediafoundation: { platforms: [win-*] }
+  - jni:             { platforms: [android-*] }
+  - mediacodec:      { platforms: [android-*] }
+  - amf:             { platforms: [win-x64] }  # AMD has no Windows-on-ARM AMF
+  - videotoolbox:    { platforms: [osx-*, ios-*, maccatalyst-*] }
+  - audiotoolbox:    { platforms: [osx-*] }  # upstream uses it on macOS only
+  - v4l2-m2m:        { platforms: [linux-x64, linux-arm64, linux-armhf, linux-musl-arm64] }  # upstream leaves it out of musl-x64
+  - vulkan:          { license: [lgplv3, gplv3, nonfree] }  # v3 only, as upstream: the linux loader is Apache-2.0
+  - placebo:         { license: [lgplv3, gplv3, nonfree] }  # needs shaderc (Apache-2.0)
+  - shaderc:         { ffmpeg: "8", license: [lgplv3, gplv3, nonfree] }  # FFmpeg 8's Vulkan filters need it
+  - whisper                                                 # Vulkan where the license allows, CPU elsewhere
+
+  # video
+  - x264:            { license: [gplv2, gplv3, nonfree] }
+  - x265:            { license: [gplv2, gplv3, nonfree] }
+  - kvazaar:         { license: [lgplv2, lgplv3] }  # the LGPL builds' HEVC encoder; GPL builds have x265
+  - openh264
+  - dav1d
+  - aom
+  - svtav1
+  - vpx
+  - webp
+  - openjpeg
+  - jxl
+  - zimg
+  - vmaf
+  - lcms2
+
+  # audio
+  - opus
+  - vorbis
+  - mp3lame
+  - speex
+  - gsm
+  - opencore-amrnb:  { license: [lgplv3, gplv3, nonfree] }
+  - opencore-amrwb:  { license: [lgplv3, gplv3, nonfree] }
+  - vo-amrwbenc:     { license: [lgplv3, gplv3, nonfree] }
+  - soxr
+  - chromaprint
+
+  # text, subtitles, XML, compression
+  - freetype
+  - fribidi
+  - harfbuzz
+  - fontconfig
+  - ass
+  - xml2
+  - zlib
+
+  # network (srt and rist use mbedTLS for encryption where the license allows it: all but lgplv2)
+  - srt
+  - rist
+
+without:
+  # the iOS simulator slice is for testing in Xcode; upstream keeps it lean
+  - vpx:        { platforms: [ios-sim-arm64] }
+  - x264:       { platforms: [ios-sim-arm64] }
+  - x265:       { platforms: [ios-sim-arm64] }
+  - kvazaar:    { platforms: [ios-sim-arm64] }
+  - opus:       { platforms: [ios-sim-arm64] }
+  - aom:        { platforms: [ios-sim-arm64] }
+  - freetype:   { platforms: [ios-sim-arm64] }
+  - fribidi:    { platforms: [ios-sim-arm64] }
+  - harfbuzz:   { platforms: [ios-sim-arm64] }
+  - fontconfig: { platforms: [ios-sim-arm64] }
+  - ass:        { platforms: [ios-sim-arm64] }
+  - vulkan:     { platforms: [ios-sim-arm64] }
+  - placebo:    { platforms: [ios-sim-arm64] }
+  - shaderc:    { platforms: [ios-sim-arm64] }
+  # Vulkan on Apple (via MoltenVK) comes with per-platform option libraries; until then not on macOS
+  - vulkan:     { platforms: [osx-*, ios-arm64, maccatalyst-*] }
+  - placebo:    { platforms: [osx-*, ios-arm64, maccatalyst-*] }
+  - shaderc:    { platforms: [osx-*, ios-arm64, maccatalyst-*] }
+  # linux-armhf builds no VA-API (upstream leaves it out of the 32-bit ARM build)
+  - vaapi:      { platforms: [linux-armhf] }
+  - drm:        { platforms: [linux-armhf] }

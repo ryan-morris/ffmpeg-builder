@@ -1,0 +1,187 @@
+# Differences scripts/compare-published-macos.sh and compare-published-frameworks.sh expect between an ffmpeg-build
+# Apple archive and the published devenvy/ffmpeg one, per platform: "<platform> <section> <diff line>", where the
+# section is files, flags, deps, binaries, symbols, encoders, decoders, filters, formats, protocols, hwaccels or bsfs, and the
+# diff line starts with - (published) or + (built). Each group says why. Anything not listed here fails the comparison.
+
+# osx-x64 is cross-compiled on Apple silicon; upstream built it natively on an Intel Mac. FFmpeg is told the target.
+osx-x64 flags +--arch=x86_64
+osx-x64 flags +--enable-cross-compile
+
+# Vulkan on Mac Catalyst (MoltenVK, linked statically) isn't built yet, on maccatalyst-arm64 either: upstream's
+# frameworks have Vulkan, libplacebo, and libavutil's two Vulkan extension functions.
+maccatalyst-x64 flags -libavcodec.framework: --enable-libplacebo
+maccatalyst-x64 flags -libavcodec.framework: --enable-vulkan
+maccatalyst-x64 flags -libavcodec.framework: --enable-vulkan-static
+maccatalyst-x64 flags -libavfilter.framework: --enable-libplacebo
+maccatalyst-x64 flags -libavfilter.framework: --enable-vulkan
+maccatalyst-x64 flags -libavfilter.framework: --enable-vulkan-static
+maccatalyst-x64 flags -libavformat.framework: --enable-libplacebo
+maccatalyst-x64 flags -libavformat.framework: --enable-vulkan
+maccatalyst-x64 flags -libavformat.framework: --enable-vulkan-static
+maccatalyst-x64 flags -libavutil.framework: --enable-libplacebo
+maccatalyst-x64 flags -libavutil.framework: --enable-vulkan
+maccatalyst-x64 flags -libavutil.framework: --enable-vulkan-static
+maccatalyst-x64 flags -libswresample.framework: --enable-libplacebo
+maccatalyst-x64 flags -libswresample.framework: --enable-vulkan
+maccatalyst-x64 flags -libswresample.framework: --enable-vulkan-static
+maccatalyst-x64 flags -libswscale.framework: --enable-libplacebo
+maccatalyst-x64 flags -libswscale.framework: --enable-vulkan
+maccatalyst-x64 flags -libswscale.framework: --enable-vulkan-static
+maccatalyst-x64 symbols -libavutil: _av_vk_get_optional_device_extensions
+maccatalyst-x64 symbols -libavutil: _av_vk_get_optional_instance_extensions
+
+# Upstream publishes one universal Catalyst slice: this x86_64 build lipo-fused with maccatalyst-arm64 at release
+# (step 6, bundle, does the fusing here).
+maccatalyst-x64 binaries -libavcodec x86_64 arm64 platform 6
+maccatalyst-x64 binaries +libavcodec x86_64 platform 6
+maccatalyst-x64 binaries -libavfilter x86_64 arm64 platform 6
+maccatalyst-x64 binaries +libavfilter x86_64 platform 6
+maccatalyst-x64 binaries -libavformat x86_64 arm64 platform 6
+maccatalyst-x64 binaries +libavformat x86_64 platform 6
+maccatalyst-x64 binaries -libavutil x86_64 arm64 platform 6
+maccatalyst-x64 binaries +libavutil x86_64 platform 6
+maccatalyst-x64 binaries -libswresample x86_64 arm64 platform 6
+maccatalyst-x64 binaries +libswresample x86_64 platform 6
+maccatalyst-x64 binaries -libswscale x86_64 arm64 platform 6
+maccatalyst-x64 binaries +libswscale x86_64 platform 6
+
+# Vulkan on macOS (the Khronos loader with MoltenVK) isn't in devenvy.yml's osx base, on osx-arm64 either: upstream
+# ships libvulkan and MoltenVK beside FFmpeg, with Vulkan and libplacebo enabled, and its programs and libavdevice/
+# libavfilter load libvulkan.
+# with Rosetta, the registered components: the Vulkan encoders, filters (libplacebo's too) and hwaccel
+osx-x64 encoders -V..... prores_ks_vulkan
+osx-x64 encoders -V....D av1_vulkan
+osx-x64 encoders -V....D ffv1_vulkan
+osx-x64 encoders -V....D h264_vulkan
+osx-x64 encoders -V....D hevc_vulkan
+osx-x64 filters -.. avgblur_vulkan
+osx-x64 filters -.. blackdetect_vulkan
+osx-x64 filters -.. blend_vulkan
+osx-x64 filters -.. chromaber_vulkan
+osx-x64 filters -.. color_vulkan
+osx-x64 filters -.. flip_vulkan
+osx-x64 filters -.. gblur_vulkan
+osx-x64 filters -.. hflip_vulkan
+osx-x64 filters -.. interlace_vulkan
+osx-x64 filters -.. libplacebo
+osx-x64 filters -.. nlmeans_vulkan
+osx-x64 filters -.. overlay_vulkan
+osx-x64 filters -.. scale_vulkan
+osx-x64 filters -.. scdet_vulkan
+osx-x64 filters -.. transpose_vulkan
+osx-x64 filters -.. v360_vulkan
+osx-x64 filters -.. vflip_vulkan
+osx-x64 filters -.. xfade_vulkan
+osx-x64 filters -T. bwdif_vulkan
+osx-x64 hwaccels -vulkan 
+osx-x64 symbols -libavutil.61.1.102.dylib: _av_vk_get_optional_device_extensions
+osx-x64 symbols -libavutil.61.1.102.dylib: _av_vk_get_optional_instance_extensions
+osx-x64 files -MoltenVK_icd.json
+osx-x64 files -libMoltenVK.dylib
+osx-x64 files -libvulkan.1.4.363.dylib
+osx-x64 files -libvulkan.1.dylib
+osx-x64 files -libvulkan.dylib
+osx-x64 flags ---enable-libplacebo
+osx-x64 flags ---enable-vulkan
+osx-x64 deps -ffmpeg: archs=x86_64 minos=11.0 id= loads=@rpath/libavcodec.63.dylib @rpath/libavdevice.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib @rpath/libvulkan.1.dylib
+osx-x64 deps -ffprobe: archs=x86_64 minos=11.0 id= loads=@rpath/libavcodec.63.dylib @rpath/libavdevice.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib @rpath/libvulkan.1.dylib
+osx-x64 deps -libMoltenVK.dylib: archs=x86_64,arm64 minos=12.0 id=@rpath/libMoltenVK.dylib loads=
+osx-x64 deps +ffmpeg: archs=x86_64 minos=11.0 id= loads=@rpath/libavcodec.63.dylib @rpath/libavdevice.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib
+osx-x64 deps +ffprobe: archs=x86_64 minos=11.0 id= loads=@rpath/libavcodec.63.dylib @rpath/libavdevice.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib
+osx-x64 deps -libavdevice.63.1.102.dylib: archs=x86_64 minos=11.0 id=@rpath/libavdevice.63.dylib loads=@rpath/libavcodec.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib @rpath/libvulkan.1.dylib
+osx-x64 deps -libavfilter.12.1.102.dylib: archs=x86_64 minos=11.0 id=@rpath/libavfilter.12.dylib loads=@rpath/libavcodec.63.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib @rpath/libvulkan.1.dylib
+osx-x64 deps +libavdevice.63.1.102.dylib: archs=x86_64 minos=11.0 id=@rpath/libavdevice.63.dylib loads=@rpath/libavcodec.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib
+osx-x64 deps +libavfilter.12.1.102.dylib: archs=x86_64 minos=11.0 id=@rpath/libavfilter.12.dylib loads=@rpath/libavcodec.63.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib
+osx-x64 deps -libvulkan.1.4.363.dylib: archs=x86_64 minos=11.0 id=@rpath/libvulkan.1.dylib loads=
+
+# Vulkan on macOS isn't in devenvy.yml's osx base (as on osx-x64): upstream ships libvulkan and MoltenVK, enables
+# Vulkan and libplacebo, and registers the Vulkan encoders, filters and hwaccel; its programs and libavdevice/
+# libavfilter load libvulkan.
+osx-arm64 files -MoltenVK_icd.json
+osx-arm64 files -libMoltenVK.dylib
+osx-arm64 files -libvulkan.1.4.363.dylib
+osx-arm64 files -libvulkan.1.dylib
+osx-arm64 files -libvulkan.dylib
+osx-arm64 flags ---enable-libplacebo
+osx-arm64 flags ---enable-vulkan
+osx-arm64 deps -ffmpeg: archs=arm64 minos=11.0 id= loads=@rpath/libavcodec.63.dylib @rpath/libavdevice.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib @rpath/libvulkan.1.dylib
+osx-arm64 deps -ffprobe: archs=arm64 minos=11.0 id= loads=@rpath/libavcodec.63.dylib @rpath/libavdevice.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib @rpath/libvulkan.1.dylib
+osx-arm64 deps -libMoltenVK.dylib: archs=x86_64,arm64 minos=12.0 id=@rpath/libMoltenVK.dylib loads=
+osx-arm64 deps +ffmpeg: archs=arm64 minos=11.0 id= loads=@rpath/libavcodec.63.dylib @rpath/libavdevice.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib
+osx-arm64 deps +ffprobe: archs=arm64 minos=11.0 id= loads=@rpath/libavcodec.63.dylib @rpath/libavdevice.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib
+osx-arm64 deps -libavdevice.63.1.102.dylib: archs=arm64 minos=11.0 id=@rpath/libavdevice.63.dylib loads=@rpath/libavcodec.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib @rpath/libvulkan.1.dylib
+osx-arm64 deps -libavfilter.12.1.102.dylib: archs=arm64 minos=11.0 id=@rpath/libavfilter.12.dylib loads=@rpath/libavcodec.63.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib @rpath/libvulkan.1.dylib
+osx-arm64 deps +libavdevice.63.1.102.dylib: archs=arm64 minos=11.0 id=@rpath/libavdevice.63.dylib loads=@rpath/libavcodec.63.dylib @rpath/libavfilter.12.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib
+osx-arm64 deps +libavfilter.12.1.102.dylib: archs=arm64 minos=11.0 id=@rpath/libavfilter.12.dylib loads=@rpath/libavcodec.63.dylib @rpath/libavformat.63.dylib @rpath/libavutil.61.dylib @rpath/libswresample.7.dylib @rpath/libswscale.10.dylib
+osx-arm64 deps -libvulkan.1.4.363.dylib: archs=arm64 minos=11.0 id=@rpath/libvulkan.1.dylib loads=
+osx-arm64 encoders -V..... prores_ks_vulkan
+osx-arm64 encoders -V....D av1_vulkan
+osx-arm64 encoders -V....D ffv1_vulkan
+osx-arm64 encoders -V....D h264_vulkan
+osx-arm64 encoders -V....D hevc_vulkan
+osx-arm64 filters -.. avgblur_vulkan
+osx-arm64 filters -.. blackdetect_vulkan
+osx-arm64 filters -.. blend_vulkan
+osx-arm64 filters -.. chromaber_vulkan
+osx-arm64 filters -.. color_vulkan
+osx-arm64 filters -.. flip_vulkan
+osx-arm64 filters -.. gblur_vulkan
+osx-arm64 filters -.. hflip_vulkan
+osx-arm64 filters -.. interlace_vulkan
+osx-arm64 filters -.. libplacebo
+osx-arm64 filters -.. nlmeans_vulkan
+osx-arm64 filters -.. overlay_vulkan
+osx-arm64 filters -.. scale_vulkan
+osx-arm64 filters -.. scdet_vulkan
+osx-arm64 filters -.. transpose_vulkan
+osx-arm64 filters -.. v360_vulkan
+osx-arm64 filters -.. vflip_vulkan
+osx-arm64 filters -.. xfade_vulkan
+osx-arm64 filters -T. bwdif_vulkan
+osx-arm64 hwaccels -vulkan 
+
+# Vulkan on iOS (MoltenVK, linked statically) isn't built yet: upstream's frameworks have --enable-vulkan(-static) and
+# libavutil's two Vulkan extension functions.
+ios-arm64 flags -libavcodec.framework: --enable-vulkan
+ios-arm64 flags -libavcodec.framework: --enable-vulkan-static
+ios-arm64 flags -libavfilter.framework: --enable-vulkan
+ios-arm64 flags -libavfilter.framework: --enable-vulkan-static
+ios-arm64 flags -libavformat.framework: --enable-vulkan
+ios-arm64 flags -libavformat.framework: --enable-vulkan-static
+ios-arm64 flags -libavutil.framework: --enable-vulkan
+ios-arm64 flags -libavutil.framework: --enable-vulkan-static
+ios-arm64 flags -libswresample.framework: --enable-vulkan
+ios-arm64 flags -libswresample.framework: --enable-vulkan-static
+ios-arm64 flags -libswscale.framework: --enable-vulkan
+ios-arm64 flags -libswscale.framework: --enable-vulkan-static
+ios-arm64 symbols -libavutil: _av_vk_get_optional_device_extensions
+ios-arm64 symbols -libavutil: _av_vk_get_optional_instance_extensions
+
+# Vulkan on Mac Catalyst isn't built yet (as on maccatalyst-x64), and upstream publishes one universal Catalyst slice:
+# this arm64 build lipo-fused with maccatalyst-x64 at release (step 6, bundle, does the fusing here).
+maccatalyst-arm64 flags -libavcodec.framework: --enable-vulkan
+maccatalyst-arm64 flags -libavcodec.framework: --enable-vulkan-static
+maccatalyst-arm64 flags -libavfilter.framework: --enable-vulkan
+maccatalyst-arm64 flags -libavfilter.framework: --enable-vulkan-static
+maccatalyst-arm64 flags -libavformat.framework: --enable-vulkan
+maccatalyst-arm64 flags -libavformat.framework: --enable-vulkan-static
+maccatalyst-arm64 flags -libavutil.framework: --enable-vulkan
+maccatalyst-arm64 flags -libavutil.framework: --enable-vulkan-static
+maccatalyst-arm64 flags -libswresample.framework: --enable-vulkan
+maccatalyst-arm64 flags -libswresample.framework: --enable-vulkan-static
+maccatalyst-arm64 flags -libswscale.framework: --enable-vulkan
+maccatalyst-arm64 flags -libswscale.framework: --enable-vulkan-static
+maccatalyst-arm64 binaries -libavcodec x86_64 arm64 platform 6
+maccatalyst-arm64 binaries -libavfilter x86_64 arm64 platform 6
+maccatalyst-arm64 binaries -libavformat x86_64 arm64 platform 6
+maccatalyst-arm64 binaries -libavutil x86_64 arm64 platform 6
+maccatalyst-arm64 binaries -libswresample x86_64 arm64 platform 6
+maccatalyst-arm64 binaries -libswscale x86_64 arm64 platform 6
+maccatalyst-arm64 binaries +libavcodec arm64 platform 6
+maccatalyst-arm64 binaries +libavfilter arm64 platform 6
+maccatalyst-arm64 binaries +libavformat arm64 platform 6
+maccatalyst-arm64 binaries +libavutil arm64 platform 6
+maccatalyst-arm64 binaries +libswresample arm64 platform 6
+maccatalyst-arm64 binaries +libswscale arm64 platform 6
+maccatalyst-arm64 symbols -libavutil: _av_vk_get_optional_device_extensions
+maccatalyst-arm64 symbols -libavutil: _av_vk_get_optional_instance_extensions

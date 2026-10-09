@@ -1,0 +1,6 @@
+name: kissfft
+license: BSD-3-Clause
+license-files: [COPYING, LICENSES/BSD-3-Clause, LICENSES/Unlicense]
+source: { git: https://github.com/mborgerding/kissfft, ref: "{version}" }
+versions: { git-tags: '^(\d+\.\d+\.\d+)$' }
+platforms: all

@@ -1,0 +1,14 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Reads the release's manifest.yml, downloads the linux-arm64 asset, verifies its sha256,
+      # unpacks it. Seconds, not hours.
+      - run: npx ffmpeg-build fetch "$(cat ffmpeg.version)" --platform linux-arm64 --out vendor/ffmpeg
+        env:
+          GH_TOKEN: ${{ secrets.FFMPEG_READ_TOKEN }}
+      - run: make firmware FFMPEG_DIR=vendor/ffmpeg

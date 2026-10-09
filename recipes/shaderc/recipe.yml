@@ -1,0 +1,12 @@
+name: shaderc
+# Only FFmpeg 8.x has this option (--enable-libshaderc, for its Vulkan filters' spirv_library); 9.x removed it and
+# probes a glslc binary instead. Everywhere else shaderc is just libplacebo's build dependency.
+provides: shaderc
+# shaderc's own licence; libshaderc_combined also bundles glslang and SPIRV-Tools (fetched by utils/git-sync-deps).
+license: Apache-2.0
+license-files: [LICENSE, third_party/LICENSE.glslang, third_party/LICENSE.spirv-tools, third_party/spirv-headers/LICENSE]
+configure: [--enable-libshaderc]
+source: { git: https://github.com/google/shaderc, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+(?:\.\d+)?)$' }
+# Where libplacebo builds (upstream: BUILD_LIBPLACEBO = BUILD_VULKAN, minus ios-sim-arm64).
+platforms: [linux-*, win-*, osx-*, ios-arm64, maccatalyst-*, android-*]

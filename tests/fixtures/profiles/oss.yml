@@ -1,0 +1,8 @@
+name: oss
+ffmpeg: [8, 9]
+platforms: all
+license: [lgplv3, gplv2]
+with:
+  - whep
+  - x265
+  - nvenc

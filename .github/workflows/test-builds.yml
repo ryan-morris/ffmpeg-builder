@@ -1,0 +1,22 @@
+# The engine's end-to-end test: builds examples/test-builds (one small target per kind of runner) with the reusable
+# build workflow, running the engine from this repository's source. Run it by hand from the Actions tab.
+name: test-builds
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: never (build only) or always (also bundle and publish a release of the test targets)
+        type: choice
+        options: [never, always]
+        default: never
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      folder: examples/test-builds
+      engine: source
+      publish: ${{ inputs.publish }}

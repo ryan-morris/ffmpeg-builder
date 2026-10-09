@@ -1,0 +1,8 @@
+name: fribidi
+provides: fribidi
+license: LGPL-2.1-or-later
+license-files: [COPYING]
+configure: [--enable-libfribidi]
+source: { git: https://github.com/fribidi/fribidi, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

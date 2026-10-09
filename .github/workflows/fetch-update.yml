@@ -1,0 +1,69 @@
+# REUSABLE (preview), for products that use a published FFmpeg build rather than building one. Moves the pin file
+# (`owner/repo@tag`) to the newest release of the same FFmpeg major that has the product's target, and opens or
+# refreshes one pull request; the product's own CI tests it against the new build.
+name: fetch-update
+
+on:
+  workflow_call:
+    inputs:
+      pin-file:
+        type: string
+        default: ffmpeg.version
+      target:
+        description: the target the product takes from each release, e.g. linux-x64-lgplv3
+        type: string
+        required: true
+      engine:
+        description: ffmpeg-build version to run
+        type: string
+        default: latest
+    secrets:
+      token:
+        description: read access to a private release repository, and pushes that trigger CI
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.token || github.token }}
+      GITHUB_TOKEN: ${{ secrets.token || github.token }}
+      BRANCH: ffmpeg-build/fetch-update
+      PIN: ${{ inputs.pin-file }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.token || github.token }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm install --global "ffmpeg-build@${{ inputs.engine }}"
+      - name: newer release?
+        id: bump
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          change="$(ffmpeg-build fetch --update "${PIN}" --target "${TARGET}")"
+          echo "${change}" >> "$GITHUB_STEP_SUMMARY"
+          echo "change=${change}" >> "$GITHUB_OUTPUT"
+      - name: open or refresh the pull request
+        if: ${{ !contains(steps.bump.outputs.change, 'up to date') }}
+        env:
+          CHANGE: ${{ steps.bump.outputs.change }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "${BRANCH}"
+          git add -- "${PIN}"
+          git commit --quiet -m "${CHANGE}"
+          git push --force origin "${BRANCH}"
+          if [ -n "$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')" ]; then
+            gh pr edit "${BRANCH}" --title "${CHANGE}" --body "${CHANGE}"
+          else
+            gh pr create --head "${BRANCH}" --title "${CHANGE}" --body "${CHANGE}"
+          fi

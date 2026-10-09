@@ -1,0 +1,9 @@
+name: libvpl
+provides: vpl
+license: MIT
+license-files: [LICENSE]
+configure: [--enable-libvpl]
+source: { git: https://github.com/intel/libvpl, ref: "v{version}" }
+# 2.x only: the repo still carries the old oneVPL tags (v2022.x, v2023.x), which would read as newer
+versions: { git-tags: '^v(2\.\d+\.\d+)$' }
+platforms: [linux-x64, linux-musl-x64, win-x64]

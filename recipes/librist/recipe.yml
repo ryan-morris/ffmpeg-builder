@@ -1,0 +1,9 @@
+name: librist
+provides: rist
+license: BSD-2-Clause
+license-files: [COPYING]
+configure: [--enable-librist]
+uses: [mbedtls] # encryption, where the license allows mbedTLS
+source: { git: https://code.videolan.org/rist/librist.git, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

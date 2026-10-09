@@ -1,0 +1,31 @@
+# Which profile licenses may link a library under each SPDX licence. Reviewed policy carried over from
+# devenvy/ffmpeg scripts/steps/04_select_license.sh -- not legal advice. `all` means every profile license.
+# A recipe's expression is read with OR (either licence's builds) and AND (only builds both allow), and a library
+# is allowed in a build only when it and everything it needs are.
+licenses:
+  MIT: all
+  MIT-Modern-Variant: all
+  BSD-2-Clause: all
+  BSD-2-Clause-Patent: all
+  BSD-3-Clause: all
+  BSD-3-Clause-Clear: all
+  ISC: all
+  Zlib: all
+  libpng-2.0: all
+  Libpng: all
+  FTL: all
+  HPND-sell-variant: all
+  Unicode-DFS-2016: all
+  WTFPL: all
+  TU-Berlin-2.0: all
+  LGPL-2.0-or-later: all
+  LGPL-2.1-or-later: all
+  MPL-2.0: all
+  LGPL-3.0-or-later: [lgplv3, gplv3, nonfree]
+  GPL-2.0-or-later: [gplv2, gplv3, nonfree]
+  GPL-3.0-or-later: [gplv3, nonfree]
+  Apache-2.0: [lgplv3, gplv3, nonfree]
+  # The LLVM exception lets Apache-2.0 code combine with GPLv2 (the NDK's libc++_shared.so, which Android archives ship).
+  Apache-2.0 WITH LLVM-exception: all
+  FDK-AAC: [nonfree]
+  proprietary: [nonfree]

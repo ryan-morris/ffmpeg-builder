@@ -1,0 +1,20 @@
+FFmpeg @FFMPEG_VERSION@ — @LICENSE@ build (@PLATFORM@, target @TARGET@)
+
+This distribution contains FFmpeg together with a set of statically-linked
+third-party libraries, produced by an automated, public, reproducible build
+definition:
+
+    @REPO@
+
+@RELEASE@
+
+A release's sources archive is the complete corresponding source for this
+build, as required by the @GNU@: the unmodified upstream FFmpeg release
+(https://ffmpeg.org/releases/ffmpeg-@FFMPEG_VERSION@.tar.xz), the source of every
+bundled library exactly as it was built, with its sha256 and commit, the patches
+applied, and the build definition (ffmpeg-build.yml, ffmpeg.lock, and the
+engine's recipes and platform scripts). Everything is public; no request to the
+distributor is necessary to obtain it.
+
+Each library's own license text accompanies this notice under
+legal/licenses/<library>/, alongside the governing license text for this build.

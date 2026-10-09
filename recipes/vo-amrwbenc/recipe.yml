@@ -1,0 +1,14 @@
+# Built from the SourceForge release tarball (the git tree has no generated configure), with the Debian
+# .orig.tar.gz as the fallback (verified byte-identical upstream for 0.1.3). Versions come from the project's
+# SourceForge git tags (v0.1.3 = vo-amrwbenc-0.1.3.tar.gz): the SourceForge file listing's links all end in
+# /download, so a listing can't read the file names.
+name: vo-amrwbenc
+provides: vo-amrwbenc
+license: Apache-2.0
+license-files: [COPYING, NOTICE, amrwbenc/NOTICE, common/NOTICE]
+configure: [--enable-libvo-amrwbenc]
+source:
+  url: "https://downloads.sourceforge.net/opencore-amr/vo-amrwbenc-{version}.tar.gz"
+  mirrors: ["https://deb.debian.org/debian/pool/main/v/vo-amrwbenc/vo-amrwbenc_{version}.orig.tar.gz"]
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$', repo: https://git.code.sf.net/p/opencore-amr/vo-amrwbenc }
+platforms: all

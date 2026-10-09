@@ -1,0 +1,13 @@
+name: vulkan-loader
+provides: vulkan
+license: Apache-2.0
+license-files: [LICENSE.txt, LICENSES/Apache-2.0.txt, LICENSES/MIT.txt, LICENSES/MIT-Khronos-old.txt, LICENSES/HPND-Kevlin-Henney.txt]
+configure: [--enable-vulkan]
+# spirv-headers: upstream installs them wherever Vulkan is enabled, because FFmpeg's own Vulkan code needs them
+# too (n9's swscale SPIR-V backend compiles only behind HAVE_SPIRV_HEADERS_SPIRV_H / HAVE_SPIRV_UNIFIED1_SPIRV_H).
+needs: [vulkan-headers, spirv-headers]
+source: { git: https://github.com/KhronosGroup/Vulkan-Loader, ref: "vulkan-sdk-{version}" }
+versions: { git-tags: '^vulkan-sdk-(\d+\.\d+\.\d+\.\d+)$' }
+# Upstream's BUILD_VULKAN_LOADER: glibc and musl Linux, and macOS (paired with MoltenVK there).
+platforms: [linux-x64, linux-arm64, linux-musl-*, osx-*] # not linux-armhf: upstream uses the headers there
+runtime: ['lib/libvulkan.so*']

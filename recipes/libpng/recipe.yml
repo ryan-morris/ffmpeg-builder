@@ -1,0 +1,7 @@
+name: libpng
+license: libpng-2.0 AND Libpng
+license-files: [LICENSE]
+needs: [zlib]
+source: { git: https://github.com/pnggroup/libpng, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

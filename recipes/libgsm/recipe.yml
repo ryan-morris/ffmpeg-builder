@@ -1,0 +1,13 @@
+# libgsm has no canonical git repo; it ships as a hand-packed tarball from quut.com (a single personal host),
+# with the Debian archive's .orig.tar.gz as the fallback (verified SHA-256-identical upstream for 1.0.24). The
+# tarball's top folder is gsm-1.0-pl24/, not gsm-1.0.24/; the engine strips it either way.
+name: libgsm
+provides: gsm
+license: TU-Berlin-2.0
+license-files: [COPYRIGHT]
+configure: [--enable-libgsm]
+source:
+  url: "https://www.quut.com/gsm/gsm-{version}.tar.gz"
+  mirrors: ["https://deb.debian.org/debian/pool/main/libg/libgsm/libgsm_{version}.orig.tar.gz"]
+versions: { listing: "https://www.quut.com/gsm/", files: '^gsm-(\d+\.\d+\.\d+)\.tar\.gz$' }
+platforms: all

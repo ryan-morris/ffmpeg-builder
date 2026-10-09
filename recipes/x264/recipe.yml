@@ -1,0 +1,9 @@
+name: x264
+provides: x264
+license: GPL-2.0-or-later
+license-files: [COPYING]
+configure: [--enable-libx264]
+# x264 has no release tags: it is pinned to a reviewed commit on the stable branch.
+source: { git: https://code.videolan.org/videolan/x264.git }
+versions: { git-branch: stable }
+platforms: all

@@ -1,0 +1,19 @@
+# A consumer's lock updates (copy into .github/workflows/): one PR with the update summary, merged when CI passes.
+# UPDATE_TOKEN: a fine-grained token with contents and pull-requests write, so its pushes run CI (GITHUB_TOKEN's don't).
+name: update
+on:
+  schedule:
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    uses: devenvy/ffmpeg-build/.github/workflows/update.yml@v1
+    with:
+      automerge: true
+    secrets:
+      token: ${{ secrets.UPDATE_TOKEN }}

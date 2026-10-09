@@ -1,0 +1,8 @@
+name: kvazaar
+provides: kvazaar
+license: BSD-3-Clause
+license-files: [LICENSE]
+configure: [--enable-libkvazaar]
+source: { git: https://github.com/ultravideo/kvazaar.git, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

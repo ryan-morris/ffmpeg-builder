@@ -1,0 +1,9 @@
+name: vulkan-headers
+license: Apache-2.0 OR MIT
+license-files: [LICENSE.md, LICENSES/Apache-2.0.txt, LICENSES/MIT.txt]
+# FFmpeg's Vulkan code also needs the SPIR-V headers (swscale's SPIR-V backend); upstream installs both together.
+needs: [spirv-headers]
+source: { git: https://github.com/KhronosGroup/Vulkan-Headers, ref: "vulkan-sdk-{version}" }
+versions: { git-tags: '^vulkan-sdk-(\d+\.\d+\.\d+\.\d+)$' }
+# Wherever upstream sets BUILD_VULKAN (v3 cells): every platform but the lean ios-sim-arm64 slice.
+platforms: [linux-*, win-*, osx-*, ios-arm64, maccatalyst-*, android-*]

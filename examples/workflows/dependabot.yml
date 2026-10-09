@@ -1,0 +1,11 @@
+# A consumer's .github/dependabot.yml: the actions its workflows use, one grouped PR a week. (ffmpeg.lock is kept
+# current by ffmpeg-build update, not Dependabot.)
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

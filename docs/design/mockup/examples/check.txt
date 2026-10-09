@@ -1,0 +1,26 @@
+$ ffmpeg-build check            # offline; also runs first inside plan / lock / build / update
+
+playback.yml   (ffmpeg: [8, 9], platforms: all, license: nonfree)
+  with: whisper { ffmpeg: ">=8" }
+    ✓ required and available on FFmpeg 8 and 9, every platform
+  openssl / schannel / securetransport  (tls - one per build)
+    ✓ linux-*, android-*: openssl     win-*: schannel     osx-*, ios-*: securetransport
+  nvenc
+    ✓ linux-x64, linux-arm64, win-x64
+    - not on osx-*, ios-*, android-*, win-arm64 (FFmpeg/NVIDIA don't support it there)   reported, not an error
+
+oss-test.yml   (ffmpeg: [4, 9], license: [lgplv3, gplv2])
+  with: whisper
+    ✓ FFmpeg 9
+    - FFmpeg 4: FFmpeg added whisper in 8.0                                              reported, not an error
+  x265
+    - lgplv3: x265 is GPL-only (FFmpeg's own classification)                             left out, reported
+
+dvr-lgpl.yml   (ffmpeg: 9, license: lgplv3)
+  ✗ patches: patches/acme-muxer
+      acme-muxer is `license: proprietary`; it can only be built with `license: nonfree`.
+      Fix: license: nonfree, or relicense the patch set under an LGPL-compatible license.
+  ✗ with: whisper { ffmpeg: ">=10" }
+      This profile targets ffmpeg: 9 only, so this entry can never apply.
+
+2 problems in dvr-lgpl.yml. Nothing was built.

@@ -1,0 +1,16 @@
+# A consumer's daily release train (copy into .github/workflows/): publishes every release whose builds changed since
+# it was last published. Back-to-back merges cost one release; a failed day is retried the next.
+name: release
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    uses: devenvy/ffmpeg-build/.github/workflows/build.yml@v1
+    with:
+      publish: changed-only

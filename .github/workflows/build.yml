@@ -1,0 +1,218 @@
+# REUSABLE (preview: not yet run end to end on a real repository). A folder of targets calls it to build and publish
+# its releases:
+#   plan (releases --json) -> build each target on its runner -> iOS bundle (macOS) -> bundle + release per release
+# `publish: changed-only` builds and publishes only the releases that changed since their last release; `always` all
+# of them; `never` builds without publishing (CI for pull requests).
+name: build
+
+on:
+  workflow_call:
+    inputs:
+      folder:
+        description: folder holding ffmpeg-build.yml and ffmpeg.lock
+        type: string
+        default: .
+      publish:
+        description: changed-only | always | never
+        type: string
+        default: changed-only
+      engine:
+        description: ffmpeg-build version to run (default the one ffmpeg.lock records; "source" builds this repository)
+        type: string
+        default: ''
+    secrets:
+      token:
+        description: read access to private patch repositories, if any
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      releases: ${{ steps.plan.outputs.releases }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      any: ${{ steps.plan.outputs.any }}
+      apple: ${{ steps.plan.outputs.apple }}
+      engine: ${{ steps.engine.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - id: engine
+        name: engine version
+        working-directory: ${{ inputs.folder }}
+        env:
+          WANTED: ${{ inputs.engine }}
+        run: |
+          version="${WANTED:-$(sed -n 's/^engine: *//p' ffmpeg.lock | head -1)}"
+          [ -n "${version}" ] || { echo "::error::no engine version: ffmpeg.lock has none and the engine input is empty"; exit 1; }
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - name: install the engine
+        env:
+          ENGINE: ${{ steps.engine.outputs.version }}
+        run: |
+          if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
+      - id: plan
+        name: releases
+        working-directory: ${{ inputs.folder }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          ffmpeg-build check
+          if [ "${PUBLISH}" = "changed-only" ]; then due=--due; else due=; fi
+          ffmpeg-build releases --json ${due} > "${RUNNER_TEMP}/releases.json"
+          {
+            echo "releases=$(jq -c . "${RUNNER_TEMP}/releases.json")"
+            echo "matrix=$(jq -c '{include: [.[] as $r | $r.targets[] | {release: $r.tag, target: .name, platform: .platform, runner: .runner, cacheKey: .cacheKey}]}' "${RUNNER_TEMP}/releases.json")"
+            echo "any=$(jq 'length > 0' "${RUNNER_TEMP}/releases.json")"
+            echo "apple=$(jq '[.[].targets[].platform | select(test("^(ios|maccatalyst)-"))] | length > 0' "${RUNNER_TEMP}/releases.json")"
+          } >> "$GITHUB_OUTPUT"
+          jq -r '.[] | "\(.tag): \(if .due then "due" else "unchanged" end) — \(.reasons | join("; "))"' "${RUNNER_TEMP}/releases.json" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    env:
+      FFMPEG_BUILD_IMAGE_CACHE: gha
+      FFMPEG_BUILD_SOURCE_REPO: ${{ github.server_url }}/${{ github.repository }}
+      FFMPEG_BUILD_SOURCE_REF: ${{ github.sha }}
+      FFMPEG_BUILD_RELEASE: ${{ matrix.release }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.token || github.token }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: engine
+        env:
+          ENGINE: ${{ needs.plan.outputs.engine }}
+        run: |
+          # "source": this repository is the engine (its own test builds); otherwise the npm package
+          if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
+      - name: Apple build tools
+        if: runner.os == 'macOS'
+        run: sed 's/#.*//' "$(npm root --global)/ffmpeg-build/platforms/setup/apple-brew.txt" | xargs brew install
+      - name: buildx with the Actions cache
+        if: runner.os == 'Linux'
+        uses: docker/setup-buildx-action@v3
+      - name: expose the Actions cache to buildx
+        if: runner.os == 'Linux'
+        uses: crazy-max/ghaction-github-runtime@v3
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ffmpeg-build
+          key: ${{ matrix.cacheKey }}
+          restore-keys: ffmpeg-build-libs-${{ matrix.platform }}-
+      - name: build ${{ matrix.target }}
+        working-directory: ${{ inputs.folder }}
+        run: ffmpeg-build build --target "${{ matrix.target }}" --out "${{ runner.temp }}/dist"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.release }}-${{ matrix.target }}
+          path: ${{ runner.temp }}/dist
+          retention-days: 5
+          if-no-files-found: error
+
+  ios:
+    needs: [plan, build]
+    if: needs.plan.outputs.apple == 'true' && inputs.publish != 'never'
+    strategy:
+      matrix:
+        release: ${{ fromJson(needs.plan.outputs.releases).*.tag }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: engine
+        env:
+          ENGINE: ${{ needs.plan.outputs.engine }}
+        run: |
+          # "source": this repository is the engine (its own test builds); otherwise the npm package
+          if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: dist-${{ matrix.release }}-*
+          path: ${{ runner.temp }}/dist
+          merge-multiple: true
+      - working-directory: ${{ inputs.folder }}
+        run: ffmpeg-build bundle --apple --release "${{ matrix.release }}" --dist "${{ runner.temp }}/dist"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-${{ matrix.release }}
+          path: ${{ runner.temp }}/dist/ffmpeg-*-ios-*.tar.gz
+          retention-days: 5
+          if-no-files-found: ignore
+
+  release:
+    needs: [plan, build, ios]
+    if: always() && needs.plan.outputs.any == 'true' && inputs.publish != 'never' && needs.build.result == 'success' && (needs.ios.result == 'success' || needs.ios.result == 'skipped')
+    strategy:
+      max-parallel: 1
+      matrix:
+        release: ${{ fromJson(needs.plan.outputs.releases).*.tag }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    concurrency:
+      group: release-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ matrix.release }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: engine
+        env:
+          ENGINE: ${{ needs.plan.outputs.engine }}
+        run: |
+          # "source": this repository is the engine (its own test builds); otherwise the npm package
+          if [ "${ENGINE}" = source ]; then (cd "${GITHUB_WORKSPACE}" && npm ci && npm run build && npm link); else npm install --global "ffmpeg-build@${ENGINE}"; fi
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: '{dist,ios}-${{ matrix.release }}*'
+          path: ${{ runner.temp }}/dist
+          merge-multiple: true
+      - name: bundle
+        working-directory: ${{ inputs.folder }}
+        # bundle reads the repository's visibility itself: nonfree targets never go to a public repository
+        run: ffmpeg-build bundle --release "${TAG}" --dist "${RUNNER_TEMP}/dist"
+      - name: publish
+        run: |
+          cd "${RUNNER_TEMP}/dist"
+          gh release create "${TAG}" --draft --title "${TAG}" --notes-file release-notes.md --target "${GITHUB_SHA}"
+          for f in $(jq -r '.assets[]' bundle.json); do
+            for i in 1 2 3; do gh release upload "${TAG}" "${f}" --clobber && break; sleep $((i * 10)); done
+          done
+          latest=false
+          [ "$(jq -r '.latest' bundle.json)" = "true" ] && latest=true
+          gh release edit "${TAG}" --draft=false --latest="${latest}"
+
+  all-builds:
+    needs: [plan, build, ios, release]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: every job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in ${RESULTS}; do
+            case "$r" in success|skipped) ;; *) echo "::error::a job ended with ${r}"; exit 1 ;; esac
+          done

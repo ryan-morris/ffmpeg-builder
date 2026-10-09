@@ -1,0 +1,14 @@
+# DVR recorder: ingest, record, hardware encode. Lightweight on purpose.
+name: dvr
+ffmpeg: 9
+platforms: [linux-x64, linux-arm64]
+license: nonfree            # internal use only: our proprietary muxer is linked in
+start: nothing               # FFmpeg's built-in codecs and formats only, plus what is listed
+
+with: [nvenc, vaapi, srt, dav1d, opus]
+
+pin:
+  nvenc: "13.0"              # recorder fleet runs NVIDIA driver 575
+
+patches: [patches/acme-muxer]
+tests: [./tests/acme-roundtrip.sh]

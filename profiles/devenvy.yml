@@ -1,0 +1,779 @@
+# The builds devenvy/ffmpeg publishes, as targets: `ffmpeg-build init` starts a folder from them. Each target is one build
+# (one platform, one license, one FFmpeg series); bases hold what targets share. `ffmpeg-build show <target>`
+# lists what a target gets and where each entry comes from.
+bases:
+  common:
+    with: [openh264, dav1d, openjpeg, jxl, zimg, vmaf, lcms2, vorbis, mp3lame, speex, gsm, soxr, chromaprint,
+           xml2, zlib, srt, rist]
+  android:
+    with: [whisper, aom, vpx, opus, freetype, fribidi, harfbuzz, ass, jni, mediacodec]
+  ios:
+    with: [whisper, aom, vpx, opus, freetype, fribidi, harfbuzz, ass, securetransport, videotoolbox]
+  ios-sim:
+    with: [whisper, securetransport, videotoolbox]
+  linux:
+    with: [v4l2-m2m, whisper, aom, vpx, webp, opus, freetype, fribidi, harfbuzz, fontconfig, ass]
+  linux-musl:
+    with: [nvenc, vaapi, drm, whisper, aom, svtav1, vpx, webp, opus, freetype, fribidi, harfbuzz, fontconfig,
+           ass]
+  maccatalyst:
+    with: [whisper, aom, vpx, opus, freetype, fribidi, harfbuzz, ass, videotoolbox]
+  osx:
+    with: [whisper, aom, svtav1, vpx, webp, opus, freetype, fribidi, harfbuzz, fontconfig, ass, audiotoolbox,
+           securetransport, videotoolbox]
+  win:
+    with: [whisper, aom, vpx, webp, opus, freetype, fribidi, harfbuzz, ass, d3d11va, dxva2, mediafoundation,
+           schannel]
+  gplv3:
+    with: [opencore-amrnb, opencore-amrwb, vo-amrwbenc]
+  lgplv3:
+    with: [opencore-amrnb, opencore-amrwb, vo-amrwbenc]
+targets:
+  android-arm64-gplv2:
+    platform: android-arm64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, android]
+    with: [gnutls, x264, x265]
+  android-arm64-gplv2-ffmpeg8:
+    platform: android-arm64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, android]
+    with: [gnutls, x264, x265]
+  android-arm64-gplv3:
+    platform: android-arm64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, android, gplv3]
+    with: [openssl, vulkan, placebo, x264, x265]
+  android-arm64-gplv3-ffmpeg8:
+    platform: android-arm64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, android, gplv3]
+    with: [openssl, vulkan, placebo, shaderc, x264, x265]
+  android-arm64-lgplv2:
+    platform: android-arm64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, android]
+    with: [kvazaar]
+  android-arm64-lgplv2-ffmpeg8:
+    platform: android-arm64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, android]
+    with: [kvazaar]
+  android-arm64-lgplv3:
+    platform: android-arm64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, android, lgplv3]
+    with: [openssl, vulkan, placebo, kvazaar]
+  android-arm64-lgplv3-ffmpeg8:
+    platform: android-arm64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, android, lgplv3]
+    with: [openssl, vulkan, placebo, shaderc, kvazaar]
+  android-x64-gplv2:
+    platform: android-x64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, android]
+    with: [gnutls, x264, x265]
+  android-x64-gplv2-ffmpeg8:
+    platform: android-x64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, android]
+    with: [gnutls, x264, x265]
+  android-x64-gplv3:
+    platform: android-x64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, android, gplv3]
+    with: [openssl, vulkan, placebo, x264, x265]
+  android-x64-gplv3-ffmpeg8:
+    platform: android-x64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, android, gplv3]
+    with: [openssl, vulkan, placebo, shaderc, x264, x265]
+  android-x64-lgplv2:
+    platform: android-x64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, android]
+    with: [kvazaar]
+  android-x64-lgplv2-ffmpeg8:
+    platform: android-x64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, android]
+    with: [kvazaar]
+  android-x64-lgplv3:
+    platform: android-x64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, android, lgplv3]
+    with: [openssl, vulkan, placebo, kvazaar]
+  android-x64-lgplv3-ffmpeg8:
+    platform: android-x64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, android, lgplv3]
+    with: [openssl, vulkan, placebo, shaderc, kvazaar]
+  ios-arm64-gplv2:
+    platform: ios-arm64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, ios]
+    with: [x264, x265]
+  ios-arm64-gplv2-ffmpeg8:
+    platform: ios-arm64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, ios]
+    with: [x264, x265]
+  ios-arm64-gplv3:
+    platform: ios-arm64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, ios, gplv3]
+    with: [x264, x265]
+    without: [placebo]
+  ios-arm64-gplv3-ffmpeg8:
+    platform: ios-arm64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, ios, gplv3]
+    with: [x264, x265]
+    without: [placebo, shaderc]
+  ios-arm64-lgplv2:
+    platform: ios-arm64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, ios]
+    with: [kvazaar]
+  ios-arm64-lgplv2-ffmpeg8:
+    platform: ios-arm64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, ios]
+    with: [kvazaar]
+  ios-arm64-lgplv3:
+    platform: ios-arm64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, ios, lgplv3]
+    with: [kvazaar]
+    without: [placebo]
+  ios-arm64-lgplv3-ffmpeg8:
+    platform: ios-arm64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, ios, lgplv3]
+    with: [kvazaar]
+    without: [placebo, shaderc]
+  ios-sim-arm64-gplv2:
+    platform: ios-sim-arm64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, ios-sim]
+    without: [x264, x265, aom, vpx, opus, freetype, fribidi, harfbuzz, ass]
+  ios-sim-arm64-gplv2-ffmpeg8:
+    platform: ios-sim-arm64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, ios-sim]
+    without: [x264, x265, aom, vpx, opus, freetype, fribidi, harfbuzz, ass]
+  ios-sim-arm64-gplv3:
+    platform: ios-sim-arm64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, ios-sim, gplv3]
+    without: [x264, x265, aom, vpx, opus, freetype, fribidi, harfbuzz, ass]
+  ios-sim-arm64-gplv3-ffmpeg8:
+    platform: ios-sim-arm64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, ios-sim, gplv3]
+    without: [x264, x265, aom, vpx, opus, freetype, fribidi, harfbuzz, ass]
+  ios-sim-arm64-lgplv2:
+    platform: ios-sim-arm64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, ios-sim]
+    without: [kvazaar, aom, vpx, opus, freetype, fribidi, harfbuzz, ass]
+  ios-sim-arm64-lgplv2-ffmpeg8:
+    platform: ios-sim-arm64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, ios-sim]
+    without: [kvazaar, aom, vpx, opus, freetype, fribidi, harfbuzz, ass]
+  ios-sim-arm64-lgplv3:
+    platform: ios-sim-arm64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, ios-sim, lgplv3]
+    without: [kvazaar, aom, vpx, opus, freetype, fribidi, harfbuzz, ass]
+  ios-sim-arm64-lgplv3-ffmpeg8:
+    platform: ios-sim-arm64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, ios-sim, lgplv3]
+    without: [kvazaar, aom, vpx, opus, freetype, fribidi, harfbuzz, ass]
+  linux-arm64-gplv2:
+    platform: linux-arm64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, linux]
+    with: [gnutls, nvenc, vaapi, drm, x264, x265, svtav1]
+  linux-arm64-gplv2-ffmpeg8:
+    platform: linux-arm64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, linux]
+    with: [gnutls, nvenc, vaapi, drm, x264, x265, svtav1]
+  linux-arm64-gplv3:
+    platform: linux-arm64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, linux, gplv3]
+    with: [openssl, nvenc, vaapi, drm, vulkan, placebo, x264, x265, svtav1]
+  linux-arm64-gplv3-ffmpeg8:
+    platform: linux-arm64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, linux, gplv3]
+    with: [openssl, nvenc, vaapi, drm, vulkan, placebo, shaderc, x264, x265, svtav1]
+  linux-arm64-lgplv2:
+    platform: linux-arm64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, linux]
+    with: [nvenc, vaapi, drm, kvazaar, svtav1]
+  linux-arm64-lgplv2-ffmpeg8:
+    platform: linux-arm64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, linux]
+    with: [nvenc, vaapi, drm, kvazaar, svtav1]
+  linux-arm64-lgplv3:
+    platform: linux-arm64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, linux, lgplv3]
+    with: [openssl, nvenc, vaapi, drm, vulkan, placebo, kvazaar, svtav1]
+  linux-arm64-lgplv3-ffmpeg8:
+    platform: linux-arm64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, linux, lgplv3]
+    with: [openssl, nvenc, vaapi, drm, vulkan, placebo, shaderc, kvazaar, svtav1]
+  linux-armhf-gplv2:
+    platform: linux-armhf
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, linux]
+    with: [gnutls, x264, x265]
+    without: [vaapi, drm]
+  linux-armhf-gplv2-ffmpeg8:
+    platform: linux-armhf
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, linux]
+    with: [gnutls, x264, x265]
+    without: [vaapi, drm]
+  linux-armhf-gplv3:
+    platform: linux-armhf
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, linux, gplv3]
+    with: [openssl, vulkan, placebo, x264, x265]
+    without: [vaapi, drm]
+  linux-armhf-gplv3-ffmpeg8:
+    platform: linux-armhf
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, linux, gplv3]
+    with: [openssl, vulkan, placebo, shaderc, x264, x265]
+    without: [vaapi, drm]
+  linux-armhf-lgplv2:
+    platform: linux-armhf
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, linux]
+    with: [kvazaar]
+    without: [vaapi, drm]
+  linux-armhf-lgplv2-ffmpeg8:
+    platform: linux-armhf
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, linux]
+    with: [kvazaar]
+    without: [vaapi, drm]
+  linux-armhf-lgplv3:
+    platform: linux-armhf
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, linux, lgplv3]
+    with: [openssl, vulkan, placebo, kvazaar]
+    without: [vaapi, drm]
+  linux-armhf-lgplv3-ffmpeg8:
+    platform: linux-armhf
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, linux, lgplv3]
+    with: [openssl, vulkan, placebo, shaderc, kvazaar]
+    without: [vaapi, drm]
+  linux-musl-arm64-gplv2:
+    platform: linux-musl-arm64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, linux-musl]
+    with: [gnutls, v4l2-m2m, x264, x265]
+  linux-musl-arm64-gplv2-ffmpeg8:
+    platform: linux-musl-arm64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, linux-musl]
+    with: [gnutls, v4l2-m2m, x264, x265]
+  linux-musl-arm64-gplv3:
+    platform: linux-musl-arm64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, linux-musl, gplv3]
+    with: [openssl, v4l2-m2m, vulkan, placebo, x264, x265]
+  linux-musl-arm64-gplv3-ffmpeg8:
+    platform: linux-musl-arm64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, linux-musl, gplv3]
+    with: [openssl, v4l2-m2m, vulkan, placebo, shaderc, x264, x265]
+  linux-musl-arm64-lgplv2:
+    platform: linux-musl-arm64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, linux-musl]
+    with: [v4l2-m2m, kvazaar]
+  linux-musl-arm64-lgplv2-ffmpeg8:
+    platform: linux-musl-arm64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, linux-musl]
+    with: [v4l2-m2m, kvazaar]
+  linux-musl-arm64-lgplv3:
+    platform: linux-musl-arm64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, linux-musl, lgplv3]
+    with: [openssl, v4l2-m2m, vulkan, placebo, kvazaar]
+  linux-musl-arm64-lgplv3-ffmpeg8:
+    platform: linux-musl-arm64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, linux-musl, lgplv3]
+    with: [openssl, v4l2-m2m, vulkan, placebo, shaderc, kvazaar]
+  linux-musl-x64-gplv2:
+    platform: linux-musl-x64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, linux-musl]
+    with: [gnutls, vpl, x264, x265]
+  linux-musl-x64-gplv2-ffmpeg8:
+    platform: linux-musl-x64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, linux-musl]
+    with: [gnutls, vpl, x264, x265]
+  linux-musl-x64-gplv3:
+    platform: linux-musl-x64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, linux-musl, gplv3]
+    with: [openssl, vpl, vulkan, placebo, x264, x265]
+  linux-musl-x64-gplv3-ffmpeg8:
+    platform: linux-musl-x64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, linux-musl, gplv3]
+    with: [openssl, vpl, vulkan, placebo, shaderc, x264, x265]
+  linux-musl-x64-lgplv2:
+    platform: linux-musl-x64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, linux-musl]
+    with: [vpl, kvazaar]
+  linux-musl-x64-lgplv2-ffmpeg8:
+    platform: linux-musl-x64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, linux-musl]
+    with: [vpl, kvazaar]
+  linux-musl-x64-lgplv3:
+    platform: linux-musl-x64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, linux-musl, lgplv3]
+    with: [openssl, vpl, vulkan, placebo, kvazaar]
+  linux-musl-x64-lgplv3-ffmpeg8:
+    platform: linux-musl-x64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, linux-musl, lgplv3]
+    with: [openssl, vpl, vulkan, placebo, shaderc, kvazaar]
+  linux-x64-gplv2:
+    platform: linux-x64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, linux]
+    with: [gnutls, nvenc, vaapi, drm, vpl, x264, x265, svtav1]
+  linux-x64-gplv2-ffmpeg8:
+    platform: linux-x64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, linux]
+    with: [gnutls, nvenc, vaapi, drm, vpl, x264, x265, svtav1]
+  linux-x64-gplv3:
+    platform: linux-x64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, linux, gplv3]
+    with: [openssl, nvenc, vaapi, drm, vpl, vulkan, placebo, x264, x265, svtav1]
+  linux-x64-gplv3-ffmpeg8:
+    platform: linux-x64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, linux, gplv3]
+    with: [openssl, nvenc, vaapi, drm, vpl, vulkan, placebo, shaderc, x264, x265, svtav1]
+  linux-x64-lgplv2:
+    platform: linux-x64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, linux]
+    with: [nvenc, vaapi, drm, vpl, kvazaar, svtav1]
+  linux-x64-lgplv2-ffmpeg8:
+    platform: linux-x64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, linux]
+    with: [nvenc, vaapi, drm, vpl, kvazaar, svtav1]
+  linux-x64-lgplv3:
+    platform: linux-x64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, linux, lgplv3]
+    with: [openssl, nvenc, vaapi, drm, vpl, vulkan, placebo, kvazaar, svtav1]
+  linux-x64-lgplv3-ffmpeg8:
+    platform: linux-x64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, linux, lgplv3]
+    with: [openssl, nvenc, vaapi, drm, vpl, vulkan, placebo, shaderc, kvazaar, svtav1]
+  maccatalyst-arm64-gplv2:
+    platform: maccatalyst-arm64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, maccatalyst]
+    with: [gnutls, x264, x265]
+  maccatalyst-arm64-gplv2-ffmpeg8:
+    platform: maccatalyst-arm64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, maccatalyst]
+    with: [gnutls, x264, x265]
+  maccatalyst-arm64-gplv3:
+    platform: maccatalyst-arm64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, maccatalyst, gplv3]
+    with: [openssl, x264, x265]
+    without: [placebo]
+  maccatalyst-arm64-gplv3-ffmpeg8:
+    platform: maccatalyst-arm64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, maccatalyst, gplv3]
+    with: [openssl, x264, x265]
+    without: [placebo, shaderc]
+  maccatalyst-arm64-lgplv2:
+    platform: maccatalyst-arm64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, maccatalyst]
+    with: [kvazaar]
+  maccatalyst-arm64-lgplv2-ffmpeg8:
+    platform: maccatalyst-arm64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, maccatalyst]
+    with: [kvazaar]
+  maccatalyst-arm64-lgplv3:
+    platform: maccatalyst-arm64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, maccatalyst, lgplv3]
+    with: [openssl, kvazaar]
+    without: [placebo]
+  maccatalyst-arm64-lgplv3-ffmpeg8:
+    platform: maccatalyst-arm64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, maccatalyst, lgplv3]
+    with: [openssl, kvazaar]
+    without: [placebo, shaderc]
+  maccatalyst-x64-gplv2:
+    platform: maccatalyst-x64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, maccatalyst]
+    with: [gnutls, x264, x265]
+  maccatalyst-x64-gplv2-ffmpeg8:
+    platform: maccatalyst-x64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, maccatalyst]
+    with: [gnutls, x264, x265]
+  maccatalyst-x64-gplv3:
+    platform: maccatalyst-x64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, maccatalyst, gplv3]
+    with: [openssl, x264, x265]
+    without: [placebo]
+  maccatalyst-x64-gplv3-ffmpeg8:
+    platform: maccatalyst-x64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, maccatalyst, gplv3]
+    with: [openssl, x264, x265]
+    without: [placebo, shaderc]
+  maccatalyst-x64-lgplv2:
+    platform: maccatalyst-x64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, maccatalyst]
+    with: [kvazaar]
+  maccatalyst-x64-lgplv2-ffmpeg8:
+    platform: maccatalyst-x64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, maccatalyst]
+    with: [kvazaar]
+  maccatalyst-x64-lgplv3:
+    platform: maccatalyst-x64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, maccatalyst, lgplv3]
+    with: [openssl, kvazaar]
+    without: [placebo]
+  maccatalyst-x64-lgplv3-ffmpeg8:
+    platform: maccatalyst-x64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, maccatalyst, lgplv3]
+    with: [openssl, kvazaar]
+    without: [placebo, shaderc]
+  osx-arm64-gplv2:
+    platform: osx-arm64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, osx]
+    with: [x264, x265]
+  osx-arm64-gplv2-ffmpeg8:
+    platform: osx-arm64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, osx]
+    with: [x264, x265]
+  osx-arm64-gplv3:
+    platform: osx-arm64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, osx, gplv3]
+    with: [x264, x265]
+    without: [vulkan, placebo]
+  osx-arm64-gplv3-ffmpeg8:
+    platform: osx-arm64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, osx, gplv3]
+    with: [x264, x265]
+    without: [vulkan, placebo, shaderc]
+  osx-arm64-lgplv2:
+    platform: osx-arm64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, osx]
+    with: [kvazaar]
+  osx-arm64-lgplv2-ffmpeg8:
+    platform: osx-arm64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, osx]
+    with: [kvazaar]
+  osx-arm64-lgplv3:
+    platform: osx-arm64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, osx, lgplv3]
+    with: [kvazaar]
+    without: [vulkan, placebo]
+  osx-arm64-lgplv3-ffmpeg8:
+    platform: osx-arm64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, osx, lgplv3]
+    with: [kvazaar]
+    without: [vulkan, placebo, shaderc]
+  osx-x64-gplv2:
+    platform: osx-x64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, osx]
+    with: [x264, x265]
+  osx-x64-gplv2-ffmpeg8:
+    platform: osx-x64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, osx]
+    with: [x264, x265]
+  osx-x64-gplv3:
+    platform: osx-x64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, osx, gplv3]
+    with: [x264, x265]
+    without: [vulkan, placebo]
+  osx-x64-gplv3-ffmpeg8:
+    platform: osx-x64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, osx, gplv3]
+    with: [x264, x265]
+    without: [vulkan, placebo, shaderc]
+  osx-x64-lgplv2:
+    platform: osx-x64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, osx]
+    with: [kvazaar]
+  osx-x64-lgplv2-ffmpeg8:
+    platform: osx-x64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, osx]
+    with: [kvazaar]
+  osx-x64-lgplv3:
+    platform: osx-x64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, osx, lgplv3]
+    with: [kvazaar]
+    without: [vulkan, placebo]
+  osx-x64-lgplv3-ffmpeg8:
+    platform: osx-x64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, osx, lgplv3]
+    with: [kvazaar]
+    without: [vulkan, placebo, shaderc]
+  win-arm64-gplv2:
+    platform: win-arm64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, win]
+    with: [x264, x265]
+  win-arm64-gplv2-ffmpeg8:
+    platform: win-arm64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, win]
+    with: [x264, x265]
+  win-arm64-gplv3:
+    platform: win-arm64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, win, gplv3]
+    with: [vulkan, placebo, x264, x265]
+  win-arm64-gplv3-ffmpeg8:
+    platform: win-arm64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, win, gplv3]
+    with: [vulkan, placebo, shaderc, x264, x265]
+  win-arm64-lgplv2:
+    platform: win-arm64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, win]
+    with: [kvazaar]
+  win-arm64-lgplv2-ffmpeg8:
+    platform: win-arm64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, win]
+    with: [kvazaar]
+  win-arm64-lgplv3:
+    platform: win-arm64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, win, lgplv3]
+    with: [vulkan, placebo, kvazaar]
+  win-arm64-lgplv3-ffmpeg8:
+    platform: win-arm64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, win, lgplv3]
+    with: [vulkan, placebo, shaderc, kvazaar]
+  win-x64-gplv2:
+    platform: win-x64
+    license: gplv2
+    ffmpeg: "9"
+    base: [common, win]
+    with: [nvenc, vpl, amf, x264, x265, svtav1]
+  win-x64-gplv2-ffmpeg8:
+    platform: win-x64
+    license: gplv2
+    ffmpeg: "8"
+    base: [common, win]
+    with: [nvenc, vpl, amf, x264, x265, svtav1]
+  win-x64-gplv3:
+    platform: win-x64
+    license: gplv3
+    ffmpeg: "9"
+    base: [common, win, gplv3]
+    with: [nvenc, vpl, amf, vulkan, placebo, x264, x265, svtav1]
+  win-x64-gplv3-ffmpeg8:
+    platform: win-x64
+    license: gplv3
+    ffmpeg: "8"
+    base: [common, win, gplv3]
+    with: [nvenc, vpl, amf, vulkan, placebo, shaderc, x264, x265, svtav1]
+  win-x64-lgplv2:
+    platform: win-x64
+    license: lgplv2
+    ffmpeg: "9"
+    base: [common, win]
+    with: [nvenc, vpl, amf, kvazaar, svtav1]
+  win-x64-lgplv2-ffmpeg8:
+    platform: win-x64
+    license: lgplv2
+    ffmpeg: "8"
+    base: [common, win]
+    with: [nvenc, vpl, amf, kvazaar, svtav1]
+  win-x64-lgplv3:
+    platform: win-x64
+    license: lgplv3
+    ffmpeg: "9"
+    base: [common, win, lgplv3]
+    with: [nvenc, vpl, amf, vulkan, placebo, kvazaar, svtav1]
+  win-x64-lgplv3-ffmpeg8:
+    platform: win-x64
+    license: lgplv3
+    ffmpeg: "8"
+    base: [common, win, lgplv3]
+    with: [nvenc, vpl, amf, vulkan, placebo, shaderc, kvazaar, svtav1]

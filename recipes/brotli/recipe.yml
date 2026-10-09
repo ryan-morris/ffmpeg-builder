@@ -1,0 +1,6 @@
+name: brotli
+license: MIT
+license-files: [LICENSE]
+source: { git: https://github.com/google/brotli, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

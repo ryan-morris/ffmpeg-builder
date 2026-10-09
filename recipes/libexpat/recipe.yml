@@ -1,0 +1,7 @@
+name: libexpat
+license: MIT
+license-files: [COPYING, expat/COPYING]
+source: { git: https://github.com/libexpat/libexpat, ref: "R_{version_}" }
+versions: { git-tags: '^R_(\d+_\d+_\d+)$' }
+# Only fontconfig uses it, and fontconfig isn't built on Windows, Android, iOS or Mac Catalyst.
+platforms: [linux-*, osx-*]

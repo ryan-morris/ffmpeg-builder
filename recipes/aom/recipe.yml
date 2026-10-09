@@ -1,0 +1,8 @@
+name: aom
+provides: aom
+license: BSD-2-Clause
+license-files: [LICENSE, PATENTS, third_party/fastfeat/LICENSE, third_party/vector/LICENSE, third_party/x86inc/LICENSE]
+configure: [--enable-libaom]
+source: { git: https://aomedia.googlesource.com/aom, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

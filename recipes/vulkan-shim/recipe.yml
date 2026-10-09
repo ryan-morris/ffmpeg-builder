@@ -1,0 +1,9 @@
+name: vulkan-shim
+license: MIT
+license-files: [LICENSE, Vulkan-Headers/LICENSE.md]
+# A static stub that loads the real Vulkan loader at run time (LoadLibrary("vulkan-1.dll")) instead of importing it,
+# so a Windows machine without a Vulkan driver still starts ffmpeg.exe; whisper's ggml-vulkan links it in place of an
+# import library. BtbN/FFmpeg-Builds uses it for the same reason. No release tags: pinned to a reviewed commit.
+source: { git: https://github.com/BtbN/Vulkan-Shim-Loader }
+versions: { git-branch: master }
+platforms: [win-*]

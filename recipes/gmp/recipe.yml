@@ -1,0 +1,8 @@
+name: gmp
+license: LGPL-3.0-or-later OR GPL-2.0-or-later
+license-files: [COPYING, COPYING.LESSERv3, COPYINGv2, COPYINGv3]
+source:
+  url: "https://mirrors.kernel.org/gnu/gmp/gmp-{version}.tar.xz"
+  mirrors: ["https://ftp.gnu.org/gnu/gmp/gmp-{version}.tar.xz"]
+versions: { listing: "https://ftp.gnu.org/gnu/gmp/", files: '^gmp-(\d+\.\d+(?:\.\d+)?)\.tar\.xz$' }
+platforms: all

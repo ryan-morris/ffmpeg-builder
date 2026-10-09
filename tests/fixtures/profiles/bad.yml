@@ -1,0 +1,14 @@
+name: bad
+ffmpeg: 9
+platforms: [linux-x64, osx-arm64]
+license: gplv3
+with:
+  - whisper: { ffmpeg: ">=10" }
+  - frobnicate
+  - x265
+  - nvenc: { platforms: [osx-*] }
+  - openssl
+  - gnutls
+without: [x265]
+pin:
+  schannel: "1.0"

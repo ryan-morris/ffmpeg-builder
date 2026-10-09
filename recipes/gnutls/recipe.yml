@@ -1,0 +1,14 @@
+name: gnutls
+provides: gnutls
+license: LGPL-2.1-or-later
+license-files: [COPYING, COPYING.LESSERv2, lib/accelerated/x86/license.txt, lib/crau/LICENSE, lib/inih/LICENSE.txt]
+configure: [--enable-gnutls]
+needs: [gmp, nettle, libtasn1]
+group: tls
+source:
+  url: "https://www.gnupg.org/ftp/gcrypt/gnutls/v{major}.{minor}/gnutls-{version}.tar.xz"
+  mirrors:
+    - "https://mirrors.dotsrc.org/gcrypt/gnutls/v{major}.{minor}/gnutls-{version}.tar.xz"
+    - "https://www.mirrorservice.org/sites/ftp.gnupg.org/gcrypt/gnutls/v{major}.{minor}/gnutls-{version}.tar.xz"
+versions: { git-tags: '^(\d+\.\d+\.\d+)$', repo: https://gitlab.com/gnutls/gnutls.git }
+platforms: [linux-*, android-*, maccatalyst-*]

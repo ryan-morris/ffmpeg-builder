@@ -1,0 +1,9 @@
+name: chromaprint
+provides: chromaprint
+license: LGPL-2.1-or-later
+license-files: [LICENSE.md]
+configure: [--enable-chromaprint]
+needs: [kissfft]
+source: { git: https://github.com/acoustid/chromaprint, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

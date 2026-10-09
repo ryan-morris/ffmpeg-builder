@@ -1,0 +1,8 @@
+name: zimg
+provides: zimg
+license: WTFPL
+license-files: [COPYING]
+configure: [--enable-libzimg]
+source: { git: https://github.com/sekrit-twc/zimg.git, ref: "release-{version}" }
+versions: { git-tags: '^release-(\d+\.\d+\.\d+)$' }
+platforms: all

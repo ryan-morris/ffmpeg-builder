@@ -1,0 +1,15 @@
+name: openssl
+provides: openssl
+license: Apache-2.0               # not allowed with GPLv2/LGPLv2.1, so v2 builds never get it
+configure: [--enable-openssl]
+
+group: tls                        # FFmpeg uses ONE tls backend per build
+prefer: 2                         # lower wins when `start: everything` picks; native backends are 1
+
+source:
+  git: https://github.com/openssl/openssl
+  ref: "openssl-{version}"
+versions:
+  git-tags: '^openssl-(3\.5\.\d+)$'   # the 3.5 LTS line
+
+platforms: [linux-*, android-*]   # Windows and Apple use their native TLS (prefer: 1)

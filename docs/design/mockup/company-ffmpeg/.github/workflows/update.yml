@@ -1,0 +1,14 @@
+# Nightly: `ffmpeg-build update` for every profile here -> one PR (examples/update-pr.md).
+# CI builds it; a person merges (internal builds: no automerge).
+name: Update
+on:
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  update:
+    uses: devenvy/ffmpeg-build/.github/workflows/update.yml@v1
+    with:
+      profile: "*.yml"
+      automerge: false

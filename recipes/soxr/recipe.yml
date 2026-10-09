@@ -1,0 +1,11 @@
+name: soxr
+provides: soxr
+license: LGPL-2.1-or-later
+license-files: [LICENCE, COPYING.LGPL]
+# FFmpeg links libsoxr via a hardcoded -lsoxr (it does not use soxr's pkg-config), so soxr's libm
+# dependency (log/pow in its FFT code) must be added to FFmpeg's own link explicitly, or the
+# --enable-libsoxr configure check fails to link. FFmpeg's configure appends every --extra-libs.
+configure: [--enable-libsoxr, --extra-libs=-lm]
+source: { git: https://github.com/dofuuz/soxr, ref: "{version}" }
+versions: { git-tags: '^(\d+\.\d+\.\d+)$' }
+platforms: all

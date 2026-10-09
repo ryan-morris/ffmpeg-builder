@@ -1,0 +1,10 @@
+name: gnutls
+provides: gnutls
+license: LGPL-2.1-or-later
+license-files: [COPYING]
+configure: [--enable-gnutls]
+needs: [gmp, nettle, libtasn1]
+group: tls
+source: { url: "https://www.gnupg.org/ftp/gcrypt/gnutls/v{major}.{minor}/gnutls-{version}.tar.xz" }
+versions: { listing: "https://www.gnupg.org/ftp/gcrypt/gnutls/", files: 'gnutls-(\d+\.\d+\.\d+)\.tar\.xz' }
+platforms: [linux-*, android-*]

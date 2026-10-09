@@ -1,0 +1,11 @@
+name: nv-codec
+provides: nvenc
+license: MIT
+license-files: [{ recipe: LICENSE }]
+configure: [--enable-ffnvcodec, --enable-cuda, --enable-nvenc, --enable-nvdec, --enable-cuvid]
+source: { git: https://github.com/FFmpeg/nv-codec-headers, ref: "n{version}" }
+versions: { git-tags: '^n(\d+\.\d+\.\d+\.\d+)$' }
+notes:
+  "13.1": needs NVIDIA driver 610+
+  "13.0": needs NVIDIA driver 570+
+platforms: [linux-x64, linux-arm64, linux-musl-x64, linux-musl-arm64, win-x64]

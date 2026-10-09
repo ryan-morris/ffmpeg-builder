@@ -1,0 +1,8 @@
+name: zlib
+provides: zlib
+license: Zlib
+license-files: [LICENSE]
+configure: [--enable-zlib]
+source: { git: https://github.com/madler/zlib, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+(?:\.\d+)?)$' }
+platforms: all

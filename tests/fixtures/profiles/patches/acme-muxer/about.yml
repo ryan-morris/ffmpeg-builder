@@ -1,0 +1,4 @@
+name: acme-muxer
+license: proprietary
+license-files: [LICENSE]
+ffmpeg: 9

@@ -1,0 +1,18 @@
+# DVR recorder: ingest, record, hardware encode. Lightweight on purpose.
+pin:
+  nvenc: "13.0"
+bases:
+  dvr: { with: [nvenc, vaapi, srt, dav1d, opus] }
+targets:
+  linux-x64:
+    platform: linux-x64
+    license: nonfree
+    ffmpeg: 9
+    base: [dvr]
+    patches: [patches/acme-muxer]
+    tests: [./tests/acme-roundtrip.sh]
+  linux-arm64:
+    platform: linux-arm64
+    license: nonfree
+    ffmpeg: 9
+    base: [dvr]

@@ -1,0 +1,8 @@
+name: x265
+provides: x265
+license: GPL-2.0-or-later
+license-files: [COPYING]
+configure: [--enable-libx265]
+source: { git: https://github.com/Multicorewareinc/x265, ref: "{version}" }
+versions: { git-tags: '^(\d+\.\d+)$' }
+platforms: all

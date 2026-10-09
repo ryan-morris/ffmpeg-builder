@@ -1,0 +1,19 @@
+name: playback
+ffmpeg: [8, 9]
+platforms: all
+license: nonfree
+with:
+  - whisper: { ffmpeg: ">=8" }
+  - schannel: { platforms: [win-*] }
+  - securetransport: { platforms: [osx-*, ios-*] }
+  - openssl: { platforms: [linux-*, android-*, maccatalyst-*] }
+  - x265
+  - dav1d
+  - nvenc
+  - vaapi
+  - srt
+  - opus
+  - whep
+pin:
+  - dav1d: { version: "1.5", platforms: [win-arm64] }
+  - nvenc: "13.0"

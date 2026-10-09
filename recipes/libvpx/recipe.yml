@@ -1,0 +1,8 @@
+name: libvpx
+provides: vpx
+license: BSD-3-Clause
+license-files: [LICENSE, PATENTS, third_party/x86inc/LICENSE]
+configure: [--enable-libvpx]
+source: { git: https://chromium.googlesource.com/webm/libvpx.git, ref: "v{version}", mirror: https://github.com/webmproject/libvpx.git }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

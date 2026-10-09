@@ -1,0 +1,8 @@
+name: openh264
+provides: openh264
+license: BSD-2-Clause
+license-files: [LICENSE]
+configure: [--enable-libopenh264]
+source: { git: https://github.com/cisco/openh264.git, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

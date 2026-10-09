@@ -1,0 +1,9 @@
+name: srt
+provides: srt
+license: MPL-2.0
+license-files: [LICENSE]
+configure: [--enable-libsrt]
+uses: [mbedtls] # encryption, where the license allows mbedTLS
+source: { git: https://github.com/Haivision/srt, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

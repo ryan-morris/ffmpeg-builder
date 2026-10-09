@@ -1,0 +1,11 @@
+name: libass
+provides: ass
+license: ISC
+license-files: [COPYING]
+configure: [--enable-libass]
+needs: [freetype, fribidi, harfbuzz, { fontconfig: { platforms: [linux-*, osx-*] } }]
+source: { git: https://github.com/libass/libass, ref: "{version}" }
+versions: { git-tags: '^(\d+\.\d+\.\d+)$' }
+# fontconfig on linux-* and osx-* only; elsewhere libass builds with -Dfontconfig=disabled (DirectWrite on Windows,
+# CoreText on Apple, no system font provider on Android), as upstream. More platforms join as their slices land.
+platforms: [linux-*, osx-*, win-*, ios-*, maccatalyst-*, android-*]

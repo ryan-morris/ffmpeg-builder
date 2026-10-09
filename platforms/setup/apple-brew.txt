@@ -1,0 +1,23 @@
+# The Homebrew build tools Apple builds use (upstream steps/03 plus GNU tools and bash 5 for the driver):
+#   brew install $(grep -v '^#' platforms/setup/apple-brew.txt)
+# Their versions are part of the library cache's key (toolchain_facts in apple-macos.sh). Verified with:
+# autoconf 2.73, automake 1.19, bash 5.3.20, cmake 4.4.4, coreutils 9.12, findutils 4.11.0, gnu-sed 4.10,
+# gnu-tar 1.35_1, gperf 3.3, grep 3.12, jq 1.8.2, libtool 2.6.2, meson 1.12.1, nasm 3.02, ninja 1.13.2,
+# pkgconf 3.0.7, yasm 1.3.0_2.
+autoconf
+automake
+bash
+cmake
+coreutils
+findutils
+gnu-sed
+gnu-tar
+gperf
+grep
+jq
+libtool
+meson
+nasm
+ninja
+pkgconf
+yasm

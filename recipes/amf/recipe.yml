@@ -1,0 +1,10 @@
+name: amf
+provides: amf
+license: MIT
+license-files: [LICENSE.txt]
+configure: [--enable-amf]
+# AMD's Advanced Media Framework headers (AMD hardware H.264/H.265/AV1 encode). Header-only. Upstream builds them for
+# win-x64 only: AMF has no Windows-on-ARM implementation.
+source: { git: https://github.com/GPUOpen-LibrariesAndSDKs/AMF, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: [win-x64]

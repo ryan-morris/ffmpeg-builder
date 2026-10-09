@@ -1,0 +1,10 @@
+# The engine's own end-to-end test: one small target per kind of runner (Linux x64 and arm64, Windows and Android
+# cross-builds, macOS), built by .github/workflows/test-builds.yml from this repository's source.
+bases:
+  small: { with: [dav1d, opus] }
+targets:
+  linux-x64-lgplv3:     { platform: linux-x64,     license: lgplv3, ffmpeg: 9, base: [small] }
+  linux-arm64-lgplv3:   { platform: linux-arm64,   license: lgplv3, ffmpeg: 9, base: [small] }
+  win-x64-lgplv3:       { platform: win-x64,       license: lgplv3, ffmpeg: 9, base: [small] }
+  android-arm64-lgplv3: { platform: android-arm64, license: lgplv3, ffmpeg: 9, base: [small] }
+  osx-arm64-lgplv3:     { platform: osx-arm64,     license: lgplv3, ffmpeg: 9, base: [small] }

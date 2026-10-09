@@ -1,0 +1,9 @@
+name: libjxl
+provides: jxl
+license: BSD-3-Clause
+license-files: [LICENSE, PATENTS]
+configure: [--enable-libjxl]
+needs: [brotli, highway, lcms2]
+source: { git: https://github.com/libjxl/libjxl, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

@@ -1,0 +1,33 @@
+# Publishes the engine to npm when a version tag (v0.2.0) is pushed, after the same checks as CI. The tag must match
+# package.json's version. Uses npm trusted publishing (OIDC) with provenance; NPM_TOKEN is only a fallback.
+name: npm-publish
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: npm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: the tag is the package version
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          [ "v${version}" = "${GITHUB_REF_NAME}" ] || { echo "::error::tag ${GITHUB_REF_NAME} but package.json says ${version}"; exit 1; }
+      - run: npm ci
+      - run: npx tsc -p tsconfig.json --noUnusedLocals --noUnusedParameters
+      - run: npx vitest run
+      - run: npm run build
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

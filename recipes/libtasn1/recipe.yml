@@ -1,0 +1,8 @@
+name: libtasn1
+license: LGPL-2.1-or-later
+license-files: [COPYING, COPYING.LESSERv2]
+source:
+  url: "https://mirrors.kernel.org/gnu/libtasn1/libtasn1-{version}.tar.gz"
+  mirrors: ["https://ftp.gnu.org/gnu/libtasn1/libtasn1-{version}.tar.gz"]
+versions: { listing: "https://ftp.gnu.org/gnu/libtasn1/", files: '^libtasn1-(\d+\.\d+(?:\.\d+)?)\.tar\.gz$' }
+platforms: all

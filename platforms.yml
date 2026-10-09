@@ -1,0 +1,102 @@
+# The platforms ffmpeg-build can build, and what every build for one needs:
+#   image      images/<image>/Dockerfile, the toolchain it builds in (or `macos`: natively on a macOS host)
+#   setup      platforms/setup/<setup>.sh: compilers, cross files and packaging for the platform
+#   configure  FFmpeg configure flags every build for the platform passes
+# FFmpeg features a platform offers (vaapi, d3d11va, videotoolbox) are options in ffmpeg/<major>.yml that profiles
+# list; they don't belong here.
+platforms:
+  linux-x64:
+    image: linux-x64
+    setup: linux
+    runner: ubuntu-24.04
+    configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-pthreads, --enable-pic, "--extra-libs=-lpthread -ldl"]
+  linux-musl-x64:
+    image: linux-musl-x64
+    setup: linux-musl
+    runner: ubuntu-24.04
+    configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-pthreads, --enable-pic, "--extra-libs=-lpthread -ldl", --extra-ldflags=-static-libgcc]
+  # 64-bit ARM: built natively in arm64 images, as upstream does on arm64 runners. An x64 host runs them under qemu
+  # 8.1.5 (qemu 9.2 breaks the manylinux image's tar), registered with tonistiigi/binfmt:qemu-v8.1.5@sha256:
+  # 2d2918e86e5327d0661f7083d67a95280b0f7be8f77ed79a8418f81d7d90ce6f: the README says how.
+  linux-arm64:
+    image: linux-arm64
+    setup: linux
+    runner: ubuntu-24.04-arm
+    configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-pthreads, --enable-pic, "--extra-libs=-lpthread -ldl"]
+  linux-musl-arm64:
+    image: linux-musl-arm64
+    setup: linux-musl
+    runner: ubuntu-24.04-arm
+    configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-pthreads, --enable-pic, --extra-ldflags=-static-libgcc]
+  osx-arm64:
+    image: macos
+    setup: apple-macos
+    runner: macos-15
+    configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-pthreads, --enable-pic, --extra-cflags=-mmacosx-version-min=11.0, --extra-cxxflags=-mmacosx-version-min=11.0, --extra-ldflags=-mmacosx-version-min=11.0]
+  # osx-x64 is cross-compiled on Apple silicon (platforms/setup/apple-macos.sh): FFmpeg is told the target.
+  osx-x64:
+    image: macos
+    setup: apple-macos
+    runner: macos-15
+    configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-pthreads, --enable-pic, --arch=x86_64, --enable-cross-compile, "--extra-cflags=-arch x86_64 -mmacosx-version-min=11.0", "--extra-cxxflags=-arch x86_64 -mmacosx-version-min=11.0", "--extra-ldflags=-arch x86_64 -mmacosx-version-min=11.0"]
+  # iOS and Mac Catalyst ship frameworks, not programs. The host-specific flags (--cc, --sysroot, the SDK's
+  # -isysroot/-target in --extra-*flags) are added by platforms/setup/apple-ios.sh's before_ffmpeg.
+  ios-arm64:
+    image: macos
+    setup: apple-ios
+    runner: macos-15
+    configure: [--disable-programs, --enable-pthreads, --enable-pic, --enable-cross-compile, --target-os=darwin, --arch=aarch64, --enable-hwaccel=h264_videotoolbox, --enable-hwaccel=hevc_videotoolbox]
+  maccatalyst-arm64:
+    image: macos
+    setup: apple-ios
+    runner: macos-15
+    configure: [--disable-programs, --enable-pthreads, --enable-pic, --enable-cross-compile, --target-os=darwin, --arch=aarch64, --enable-hwaccel=h264_videotoolbox, --enable-hwaccel=hevc_videotoolbox]
+  maccatalyst-x64:
+    image: macos
+    setup: apple-ios
+    runner: macos-15
+    configure: [--disable-programs, --enable-pthreads, --enable-pic, --enable-cross-compile, --target-os=darwin, --arch=x86_64, --enable-hwaccel=h264_videotoolbox, --enable-hwaccel=hevc_videotoolbox]
+  ios-sim-arm64:
+    image: macos
+    setup: apple-ios
+    runner: macos-15
+    configure: [--disable-programs, --enable-pthreads, --enable-pic, --enable-cross-compile, --target-os=darwin, --arch=aarch64, --enable-hwaccel=h264_videotoolbox, --enable-hwaccel=hevc_videotoolbox]
+  # Windows: cross-compiled; the C/C++ runtimes are linked statically (no libgcc/libstdc++/libc++ DLLs to ship).
+  # -DCHROMAPRINT_NODLL: chromaprint is linked statically, and its header otherwise declares dllimport.
+  win-x64:
+    image: cross-windows
+    setup: windows
+    runner: ubuntu-24.04
+    configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-w32threads, --pkg-config=pkg-config, --target-os=mingw32, --enable-cross-compile, --arch=x86_64, --cross-prefix=x86_64-w64-mingw32-, --cc=x86_64-w64-mingw32-gcc-win32, --cxx=x86_64-w64-mingw32-g++-win32,
+      "--extra-cflags=-static-libgcc -static-libstdc++ -O2 -pipe -DCHROMAPRINT_NODLL", "--extra-cxxflags=-static-libgcc -static-libstdc++ -O2 -pipe", "--extra-ldflags=-static-libgcc -static-libstdc++"]
+  win-arm64:
+    image: cross-windows
+    setup: windows
+    runner: ubuntu-24.04
+    configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-w32threads, --pkg-config=pkg-config, --target-os=mingw32, --enable-cross-compile, --arch=aarch64, --cross-prefix=aarch64-w64-mingw32-, --cc=aarch64-w64-mingw32-clang, --cxx=aarch64-w64-mingw32-clang++,
+      "--extra-cflags=-static-libgcc -O2 -pipe -DCHROMAPRINT_NODLL", "--extra-cxxflags=-static-libgcc -static-libstdc++ -O2 -pipe -include system_error", "--extra-ldflags=-static-libgcc -static-libstdc++"]
+  # 32-bit ARM (Raspberry Pi with a 32-bit OS), cross-compiled with Debian's gcc; glibc 2.36+.
+  linux-armhf:
+    image: cross-armhf
+    setup: linux-armhf
+    runner: ubuntu-24.04
+    configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-pthreads, --enable-pic, --arch=arm, --cpu=armv7-a+vfpv3,
+      --cross-prefix=arm-linux-gnueabihf-, --pkg-config=pkg-config, --enable-cross-compile, --target-os=linux]
+  # Android: libraries only (apps load them), API 28+, 16 KB pages. The NDK's own paths (--cc, --sysroot, ...) are added
+  # by platforms/setup/android.sh's before_ffmpeg.
+  android-arm64:
+    image: cross-android
+    setup: android
+    runner: ubuntu-24.04
+    configure: [--disable-programs, --enable-pthreads, --enable-pic, --enable-cross-compile, --target-os=android, --arch=aarch64,
+      "--extra-ldflags=-Wl,-z,max-page-size=16384"]
+    # the NDK's C++ runtime (Android doesn't provide it) and the NDK's licence text for it (TOOLCHAIN: setup/android.sh)
+    ships: { libc++_shared.so: { license: Apache-2.0 WITH LLVM-exception, notice: "${TOOLCHAIN}/NOTICE" } }
+  android-x64:
+    image: cross-android
+    setup: android
+    runner: ubuntu-24.04
+    configure: [--disable-programs, --enable-pthreads, --enable-pic, --enable-cross-compile, --target-os=android, --arch=x86_64,
+      "--extra-ldflags=-Wl,-z,max-page-size=16384"]
+    # the NDK's C++ runtime (Android doesn't provide it) and the NDK's licence text for it (TOOLCHAIN: setup/android.sh)
+    ships: { libc++_shared.so: { license: Apache-2.0 WITH LLVM-exception, notice: "${TOOLCHAIN}/NOTICE" } }

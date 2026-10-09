@@ -1,0 +1,5 @@
+# Where FFmpeg's own versions come from (its release tags, n9.0.2), and its source tarball.
+git: https://github.com/FFmpeg/FFmpeg
+versions: { git-tags: '^n(\d+\.\d+(?:\.\d+)?)$' }
+url: "https://ffmpeg.org/releases/ffmpeg-{version}.tar.xz"
+mirrors: ["https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n{version}.tar.gz"]

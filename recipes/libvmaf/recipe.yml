@@ -1,0 +1,8 @@
+name: libvmaf
+provides: vmaf
+license: BSD-2-Clause-Patent
+license-files: [LICENSE]
+configure: [--enable-libvmaf]
+source: { git: https://github.com/Netflix/vmaf, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

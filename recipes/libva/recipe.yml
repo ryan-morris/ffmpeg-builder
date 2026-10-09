@@ -1,0 +1,9 @@
+name: libva
+provides: vaapi
+license: MIT
+license-files: [COPYING]
+configure: [--enable-vaapi]
+needs: [libdrm]
+source: { git: https://github.com/intel/libva, ref: "{version}" }
+versions: { git-tags: '^(\d+\.\d+\.\d+)$' }
+platforms: [linux-*]

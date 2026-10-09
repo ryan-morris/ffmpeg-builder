@@ -1,0 +1,7 @@
+name: nettle
+license: LGPL-3.0-or-later OR GPL-2.0-or-later
+license-files: [COPYING]
+needs: [gmp]
+source: { url: "https://ftp.gnu.org/gnu/nettle/nettle-{version}.tar.gz" }
+versions: { listing: "https://ftp.gnu.org/gnu/nettle/", files: 'nettle-(\d+\.\d+(?:\.\d+)?)\.tar\.gz' }
+platforms: all

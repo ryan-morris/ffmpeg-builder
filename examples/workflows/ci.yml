@@ -1,0 +1,13 @@
+# A consumer's pull-request check (copy into .github/workflows/): builds what the PR changes, publishes nothing.
+name: ci
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: devenvy/ffmpeg-build/.github/workflows/build.yml@v1
+    with:
+      publish: never

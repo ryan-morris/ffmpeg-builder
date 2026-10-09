@@ -1,0 +1,9 @@
+name: openssl
+provides: openssl
+license: Apache-2.0
+license-files: [LICENSE.txt]
+configure: [--enable-openssl]
+group: tls
+source: { git: https://github.com/openssl/openssl, ref: "openssl-{version}" }
+versions: { git-tags: '^openssl-(3\.5\.\d+)$' }
+platforms: [linux-*, android-*, maccatalyst-*]

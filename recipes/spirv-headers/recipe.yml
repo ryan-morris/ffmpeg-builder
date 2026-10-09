@@ -1,0 +1,8 @@
+name: spirv-headers
+license: MIT
+license-files: [LICENSE, LICENSES/MIT.txt]
+source: { git: https://github.com/KhronosGroup/SPIRV-Headers, ref: "vulkan-sdk-{version}" }
+versions: { git-tags: '^vulkan-sdk-(\d+\.\d+\.\d+\.\d+)$' }
+# Upstream: WHISPER_BACKEND == vulkan or BUILD_VULKAN. whisper needs it only for its Vulkan backend (linux, Windows,
+# Android); Apple whisper uses Metal. The Apple entries are for FFmpeg's Vulkan (MoltenVK) once it builds there.
+platforms: [linux-*, win-*, osx-*, ios-arm64, maccatalyst-*, android-*]

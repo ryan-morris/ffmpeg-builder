@@ -1,0 +1,67 @@
+{
+  "name": "ffmpeg-build",
+  "version": "0.2.0",
+  "description": "Build FFmpeg your way: version, platforms, license, libraries and patches from one YAML file, with locked versions and checked licenses",
+  "keywords": [
+    "ffmpeg",
+    "build",
+    "cross-compile",
+    "license",
+    "codecs",
+    "android",
+    "ios",
+    "windows",
+    "linux",
+    "macos"
+  ],
+  "homepage": "https://github.com/ryan-morris/ffmpeg-builder#readme",
+  "bugs": {
+    "url": "https://github.com/ryan-morris/ffmpeg-builder/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryan-morris/ffmpeg-builder.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "ffmpeg-build": "dist/cli.js"
+  },
+  "files": [
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "dist",
+    "docs/building.md",
+    "docs/releases.md",
+    "docs/targets.md",
+    "ffmpeg",
+    "images",
+    "licenses.yml",
+    "platforms",
+    "platforms.yml",
+    "profiles",
+    "recipes",
+    "schema"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "schema": "node scripts/gen-schema.ts",
+    "dev": "node src/cli.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "commander": "15.0.0",
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.x",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

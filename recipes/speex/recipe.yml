@@ -1,0 +1,8 @@
+name: speex
+provides: speex
+license: BSD-3-Clause
+license-files: [COPYING]
+configure: [--enable-libspeex]
+source: { git: https://github.com/xiph/speex, ref: "Speex-{version}" }
+versions: { git-tags: '^Speex-(\d+\.\d+(?:\.\d+)*)$' }
+platforms: all

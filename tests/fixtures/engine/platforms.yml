@@ -1,0 +1,11 @@
+# The platforms ffmpeg-build can build, and what every build for one needs:
+#   image      images/<image>/Dockerfile, the toolchain it builds in (or `macos`: natively on a macOS host)
+#   setup      platforms/setup/<setup>.sh: compilers, cross files and packaging for the platform
+#   configure  FFmpeg configure flags every build for the platform passes
+# FFmpeg features a platform offers (vaapi, d3d11va, videotoolbox) are options in ffmpeg/<major>.yml that profiles
+# list; they don't belong here.
+platforms:
+  linux-x64:
+    image: linux-x64
+    setup: linux
+    configure: [--enable-ffmpeg, --enable-ffprobe, --disable-ffplay, --enable-pthreads, --enable-pic, "--extra-libs=-lpthread -ldl"]

@@ -1,0 +1,15 @@
+# Serves two FFmpeg options, opencore-amrnb and opencore-amrwb (both version3: Apache-2.0); each option's own
+# `configure:` in ffmpeg/<major>.yml enables only its flag. Built from the SourceForge release tarball (the git
+# tree has no generated configure), with the Debian .orig.tar.gz as the fallback (verified byte-identical
+# upstream for 0.1.6). Versions come from the project's SourceForge git tags (v0.1.6 =
+# opencore-amr-0.1.6.tar.gz): the SourceForge file listing's links all end in /download, so a listing can't read
+# the file names.
+name: opencore-amr
+license: Apache-2.0
+license-files: [LICENSE, opencore/NOTICE]
+configure: [--enable-libopencore-amrnb, --enable-libopencore-amrwb]
+source:
+  url: "https://downloads.sourceforge.net/opencore-amr/opencore-amr-{version}.tar.gz"
+  mirrors: ["https://deb.debian.org/debian/pool/main/o/opencore-amr/opencore-amr_{version}.orig.tar.gz"]
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$', repo: https://git.code.sf.net/p/opencore-amr/code }
+platforms: all

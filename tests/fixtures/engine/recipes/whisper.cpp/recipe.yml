@@ -1,0 +1,8 @@
+name: whisper.cpp
+provides: whisper
+license: MIT
+license-files: [COPYING]
+configure: [--enable-whisper]
+source: { git: https://github.com/ggml-org/whisper.cpp, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

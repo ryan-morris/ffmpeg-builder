@@ -1,0 +1,19 @@
+name: whisper.cpp
+provides: whisper
+license: MIT
+license-files: [LICENSE]
+configure: [--enable-whisper]
+# linux-*: the ggml Vulkan backend links OUR bundled libc-only loader (vulkan-loader, which brings vulkan-headers)
+# and finds SPIRV-Headers' CMake config (spirv-headers). The loader is optional: builds whose license leaves it out
+# (Apache-2.0: the v2 builds) get the CPU backend (build.sh). Windows and Android compile against the headers alone
+# (Apache-2.0 OR MIT, so every license); Android links the NDK's libvulkan, so its v2 builds keep Vulkan.
+needs: [{ spirv-headers: { platforms: [linux-*, win-*, android-*] } }, { vulkan-headers: { platforms: [win-*, android-*] } }] # SPIR-V for the Vulkan backend; Apple uses Metal
+# Vulkan where the license allows it: the loader on linux, the static shim on Windows (vulkan-1.dll resolved at run
+# time); without them, the CPU backend (build.sh)
+uses: [{ vulkan-loader: { platforms: [linux-x64, linux-arm64, linux-musl-*] } }, { vulkan-shim: { platforms: [win-*] } }]
+source: { git: https://github.com/ggml-org/whisper.cpp, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+# Upstream builds whisper on every platform. build.sh keeps every platform's arm (win: the static Vulkan shim;
+# android: the NDK libvulkan; Apple: Metal); each platform joins this list, with its dependencies limited to it,
+# when that platform's slice of step 5 lands.
+platforms: [linux-*, osx-*, win-*, ios-*, maccatalyst-*, android-*]

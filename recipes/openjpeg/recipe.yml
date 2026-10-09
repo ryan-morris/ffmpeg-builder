@@ -1,0 +1,8 @@
+name: openjpeg
+provides: openjpeg
+license: BSD-2-Clause
+license-files: [LICENSE]
+configure: [--enable-libopenjpeg]
+source: { git: https://github.com/uclouvain/openjpeg.git, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+platforms: all

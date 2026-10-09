@@ -1,0 +1,8 @@
+name: libdrm
+provides: drm
+license: MIT
+license-files: [{ recipe: LICENSE }]
+configure: [--enable-libdrm]
+source: { git: https://gitlab.freedesktop.org/mesa/drm.git, ref: "libdrm-{version}" }
+versions: { git-tags: '^libdrm-(\d+\.\d+\.\d+)$' }
+platforms: [linux-*]

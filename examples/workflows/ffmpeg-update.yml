@@ -1,0 +1,20 @@
+# A product's FFmpeg bumps (copy into .github/workflows/): moves ffmpeg.version to the newest build of the same FFmpeg
+# major and opens a PR; the product's CI tests it.
+name: ffmpeg-update
+on:
+  schedule:
+    - cron: '11 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    uses: devenvy/ffmpeg-build/.github/workflows/fetch-update.yml@v1
+    with:
+      pin-file: ffmpeg.version
+      target: linux-x64-lgplv3
+    secrets:
+      token: ${{ secrets.FFMPEG_READ_TOKEN }}

@@ -1,0 +1,7 @@
+name: mbedtls
+license: Apache-2.0 OR GPL-2.0-or-later
+license-files: [COPYING]
+configure: []
+source: { url: "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-{version}/mbedtls-{version}.tar.bz2" }
+versions: { git-tags: '^v(3\.\d+\.\d+)$', repo: https://github.com/Mbed-TLS/mbedtls }
+platforms: all

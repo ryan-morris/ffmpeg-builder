@@ -1,0 +1,12 @@
+name: libplacebo
+provides: placebo
+license: LGPL-2.1-or-later
+license-files: [LICENSE, 3rdparty/glad/LICENSE, 3rdparty/fast_float/LICENSE-MIT, 3rdparty/fast_float/LICENSE-APACHE, 3rdparty/fast_float/LICENSE-BOOST]
+configure: [--enable-libplacebo]
+# What it builds against: the Vulkan headers + vk.xml registry, shaderc (-Dshaderc=enabled) and lcms2
+# (-Dlcms=enabled). Not the loader: -Dvk-proc-addr=disabled, FFmpeg's vf_libplacebo supplies vkGetInstanceProcAddr.
+needs: [vulkan-headers, shaderc, lcms2]
+source: { git: https://github.com/haasn/libplacebo, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+\.\d+)$' }
+# Upstream: BUILD_LIBPLACEBO = BUILD_VULKAN, minus the lean ios-sim-arm64 slice.
+platforms: [linux-*, win-*, osx-*, ios-arm64, maccatalyst-*, android-*]

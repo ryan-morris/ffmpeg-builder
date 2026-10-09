@@ -1,0 +1,80 @@
+# HAND-WRITTEN until the nightly generator (ffmpeg-support.yml) replaces it: the options linux-x64 builds today.
+# Classes (ffmpeg-license) and minimums (min) are copied from FFmpeg 9.0.2's configure. Option names are FFmpeg's
+# configure names without a leading `lib`, plus the friendly groupings nvenc (nv-codec), vaapi (libva), whisper.
+major: 9
+releases: [9.0.0, 9.0.1, 9.0.2, 9.1.0]
+options:
+  # built into FFmpeg: nothing to build
+  whep:            { builtin: true, kind: muxer, since: 9.1.0 }
+  # Android's hardware video (MediaCodec) and the Java bridge it needs (both built into FFmpeg; the OS provides them)
+  jni:             { builtin: true, kind: hwaccel, platforms: [android-*] }
+  # the MediaCodec decoders; FFmpeg has no mediacodec hwaccels (upstream's --enable-hwaccel=h264_mediacodec and
+  # hevc_mediacodec matched nothing)
+  mediacodec:      { builtin: true, kind: hwaccel, platforms: [android-*],
+                     configure: [--enable-mediacodec, --enable-decoder=h264_mediacodec, --enable-decoder=hevc_mediacodec] }
+  # Windows hardware video and the media framework (built into FFmpeg; the OS provides them at run time)
+  d3d11va:         { builtin: true, kind: hwaccel, platforms: [win-*] }
+  dxva2:           { builtin: true, kind: hwaccel, platforms: [win-*] }
+  mediafoundation: { builtin: true, kind: hwaccel, platforms: [win-*] }
+  amf:             { needs: amf, platforms: [win-*, linux-*] }
+  schannel:        { builtin: true, kind: tls, platforms: [win-*], group: tls }
+  securetransport: { builtin: true, kind: tls, platforms: [osx-*, ios-*], group: tls }
+  v4l2-m2m:        { builtin: true, kind: hwaccel, platforms: [linux-*, android-*] }
+  videotoolbox:    { builtin: true, kind: hwaccel, platforms: [osx-*, ios-*, maccatalyst-*] }
+  audiotoolbox:    { builtin: true, kind: hwaccel, platforms: [osx-*, ios-*, maccatalyst-*] }
+
+  # TLS (one per build: group tls; the profile lists which, per platform and license)
+  openssl:     { needs: openssl, min: 3.0.0 }
+  gnutls:      { needs: gnutls }
+
+  # hardware
+  nvenc:       { needs: nv-codec, platforms: [linux-*, win-*] }
+  vaapi:       { needs: libva, platforms: [linux-*] }
+  drm:         { needs: libdrm, platforms: [linux-*] }
+  vpl:         { needs: libvpl, min: 2.6.0 }
+  # FFmpeg's Vulkan: the Khronos loader on linux and osx; on Windows, linux-armhf and Android only the headers (FFmpeg
+  # loads the system's Vulkan library at run time)
+  vulkan:      { needs: [{ vulkan-loader: { platforms: [linux-x64, linux-arm64, linux-musl-*, osx-*] } }, { vulkan-headers: { platforms: [win-*, linux-armhf, android-*] } }], min: 1.3.277, configure: [--enable-vulkan] }
+  placebo:     { needs: libplacebo, min: 7.351.0 }
+  whisper:     { needs: whisper.cpp, min: 1.7.5 }
+
+  # video
+  x264:        { needs: x264, ffmpeg-license: gpl }
+  x265:        { needs: x265, ffmpeg-license: gpl }
+  openh264:    { needs: openh264, min: 1.3.0 }
+  kvazaar:     { needs: kvazaar, min: 2.0.0 }
+  dav1d:       { needs: dav1d, min: 1.0.0 }
+  aom:         { needs: aom, min: 2.0.0 }
+  svtav1:      { needs: svtav1, min: 0.9.0 }
+  vpx:         { needs: libvpx, min: 1.4.0 }
+  webp:        { needs: libwebp, min: 0.2.0 }
+  openjpeg:    { needs: openjpeg, min: 2.1.0 }
+  jxl:         { needs: libjxl, min: 0.7.0 }
+  zimg:        { needs: zimg, min: 2.7.0 }
+  vmaf:        { needs: libvmaf, min: 2.0.0 }
+  lcms2:       { needs: lcms2, min: 2.13 }
+
+  # audio
+  opus:           { needs: opus }
+  vorbis:         { needs: libvorbis }
+  mp3lame:        { needs: libmp3lame }
+  speex:          { needs: speex }
+  gsm:            { needs: libgsm }
+  opencore-amrnb: { needs: opencore-amr, ffmpeg-license: version3, configure: [--enable-libopencore-amrnb] }
+  opencore-amrwb: { needs: opencore-amr, ffmpeg-license: version3, configure: [--enable-libopencore-amrwb] }
+  vo-amrwbenc:    { needs: vo-amrwbenc, ffmpeg-license: version3 }
+  soxr:           { needs: soxr }
+  chromaprint:    { needs: chromaprint }
+
+  # text, subtitles, XML, compression
+  freetype:    { needs: freetype }
+  fribidi:     { needs: fribidi }
+  harfbuzz:    { needs: harfbuzz }
+  fontconfig:  { needs: fontconfig }
+  ass:         { needs: libass, min: 0.11.0 }
+  xml2:        { needs: libxml2 }
+  zlib:        { needs: zlib }
+
+  # network
+  srt:         { needs: srt, min: 1.3.0 }
+  rist:        { needs: librist, min: 0.2.7 }

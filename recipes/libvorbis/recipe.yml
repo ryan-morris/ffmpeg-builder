@@ -1,0 +1,9 @@
+name: libvorbis
+provides: vorbis
+license: BSD-3-Clause
+license-files: [COPYING]
+configure: [--enable-libvorbis]
+needs: [libogg]
+source: { git: https://github.com/xiph/vorbis, ref: "v{version}" }
+versions: { git-tags: '^v(\d+\.\d+(?:\.\d+)?)$' }
+platforms: all

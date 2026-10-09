@@ -1,0 +1,18 @@
+# Playback app: decode everything, everywhere.
+name: playback
+ffmpeg: [8, 9]
+platforms: all
+license: nonfree            # internal use only: our proprietary muxer is linked in
+start: everything
+
+without: [vmaf, chromaprint]
+
+with:
+  - whisper: { ffmpeg: ">=8" }                       # captions: REQUIRED wherever FFmpeg 8+ is built
+
+pin:
+  - libplacebo: { version: "7.349", platforms: [win-arm64] }   # newer one crashes on Adreno GPUs
+  - nvenc: "13.0"
+
+patches: [patches/acme-muxer]
+tests: [./tests/acme-roundtrip.sh]

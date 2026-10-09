@@ -1,0 +1,9 @@
+name: harfbuzz
+provides: harfbuzz
+license: MIT-Modern-Variant
+license-files: [COPYING, src/ms-use/COPYING]
+configure: [--enable-libharfbuzz]
+needs: [freetype]
+source: { git: https://github.com/harfbuzz/harfbuzz, ref: "{version}" }
+versions: { git-tags: '^(\d+\.\d+\.\d+)$' }
+platforms: all

@@ -1,0 +1,8 @@
+name: lcms2
+provides: lcms2
+license: MIT
+license-files: [LICENSE]
+configure: [--enable-lcms2]
+source: { git: https://github.com/mm2/Little-CMS, ref: "lcms{version}" }
+versions: { git-tags: '^lcms(\d+\.\d+(?:\.\d+)?)$' }
+platforms: all
