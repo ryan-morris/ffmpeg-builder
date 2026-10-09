@@ -243,3 +243,13 @@ export async function updatePin(pinFile: string, sel: { target?: string; platfor
   }
   return undefined;
 }
+
+/** Whether a repository is private, as the GitHub API says (a token is needed to see a private one at all). */
+export async function repoIsPrivate(repo: string): Promise<boolean> {
+  return (await json<{ private: boolean }>(`${api()}/repos/${repo}`, `repository ${repo}`)).private;
+}
+
+/** Whether FFmpeg version `a` is at least `b` (as three parts: 9.0 is 9.0.0). */
+export function ffmpegAtLeast(a: string, b: string): boolean {
+  return !newer(versionKey({ ffmpeg: b, build: 0 }), versionKey({ ffmpeg: a, build: 0 }));
+}

@@ -226,6 +226,8 @@ describe.skipIf(!hasTools)('the driver: THIRD-PARTY-NOTICES.txt and sources', ()
     expect(kept).toEqual(expect.arrayContaining([`beta-${commit}/LICENSE.md`, `beta-${commit}/beta.c`, `beta-${commit}/third_party/nested/N.txt`]));
     // as checked out: .gitattributes' export-ignore and export-subst don't apply
     expect(bash(`tar -xzOf "$T/cache/sources/${beta.file}" "beta-${commit}/version.h"`)).toBe('#define REV "$Format:%H$"\n');
+    // and every kept file is copied beside the archives, for a release bundled on another machine
+    for (const entry of [s.ffmpeg, alpha, beta]) expect(sha256(join(T, 'out', `${first.name}.sources`, entry.file)), entry.name).toBe(entry.sha256);
   });
 
   it("puts each library's licence files and source record in its cache entry", () => {

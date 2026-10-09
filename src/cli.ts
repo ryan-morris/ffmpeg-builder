@@ -13,7 +13,9 @@ import { UpstreamFailure, WriteError } from './commands/versions.ts';
 import { EngineDataError, loadEngineData } from './engine-data.ts';
 import { fetchRelease, FetchError, updatePin } from './fetch.ts';
 import { selectionFrom } from './folder-init.ts';
-import { LockError } from './lockfile.ts';
+import { bundle, BundleError } from './bundle.ts';
+import { LOCK_FILE, LockError, readFolderLock } from './lockfile.ts';
+import { ManifestError, parseManifest } from './manifest.ts';
 import { EditError } from './profile-edit.ts';
 import { dataRoot, packageRoot, packageVersion } from './paths.ts';
 import { GitMissingError } from './upstream.ts';
@@ -31,7 +33,7 @@ async function run(fn: () => { output: string; exitCode: number } | Promise<{ ou
       process.exitCode = e.exitCode;
       return;
     }
-    if (e instanceof UsageError || e instanceof EngineDataError || e instanceof UpstreamFailure || e instanceof GitMissingError || e instanceof LockError || e instanceof WriteError || e instanceof BuildError || e instanceof EditError || e instanceof FolderError) {
+    if (e instanceof UsageError || e instanceof EngineDataError || e instanceof UpstreamFailure || e instanceof GitMissingError || e instanceof LockError || e instanceof WriteError || e instanceof BuildError || e instanceof EditError || e instanceof FolderError || e instanceof BundleError || e instanceof ManifestError) {
       console.log(e.message);
       process.exitCode = 2;
     } else {
@@ -128,6 +130,23 @@ program
   .option('--json', 'machine-readable output (the CI build matrix)')
   .action((opts: { due?: boolean; offline?: boolean; json?: boolean }) =>
     run(() => runReleases(openFolder(), data(), { due: opts.due === true, offline: opts.offline === true, json: opts.json === true })),
+  );
+
+program
+  .command('bundle')
+  .description("write a release's sources archive, manifest.yml, SHA256SUMS and release notes beside its built targets")
+  .requiredOption('--release <tag>', 'the release, e.g. 9.0.2.3 (`ffmpeg-build releases` says which is next)')
+  .option('--dist <dir>', 'where the targets were built (build --out)', 'dist')
+  .option('--previous <manifest>', "the last release's manifest.yml (default: looked up on GitHub)")
+  .action((opts: { release: string; dist: string; previous?: string }) =>
+    run(async () => {
+      const folder = openFolder();
+      const lock = readFolderLock(join(folder.dir, LOCK_FILE));
+      if (!lock) throw new UsageError(`no ${LOCK_FILE} here; run ffmpeg-build lock first`);
+      const previous = opts.previous ? parseManifest(readFileSync(opts.previous, 'utf8'), opts.previous) : undefined;
+      const r = await bundle(folder, data(), lock, { tag: opts.release, dist: opts.dist, engineRoot: packageRoot, ...(previous ? { previous } : {}) });
+      return { output: [...r.notes, `${r.tag}: ${r.assets.join(', ')}${r.latest ? ' (latest)' : ''}`].join('\n'), exitCode: 0 };
+    }),
   );
 
 program

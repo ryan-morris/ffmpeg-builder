@@ -355,4 +355,10 @@ jq -n --arg name "${NAME}" --argjson ffmpeg "${ff_record}" --slurpfile libraries
   | { artifact: $name, target: $p.target, platform: $p.platform, license: $p.license, release: ($p.release // null),
       ffmpeg: $ffmpeg, libraries: $libraries, patches: [$p.patches[] | {name, sha256}] }' >"${OUT}/${NAME}.sources.json.tmp"
 mv -f "${OUT}/${NAME}.sources.json.tmp" "${OUT}/${NAME}.sources.json"
-step "done: ${NAME}.tar.gz, ${NAME}-dev.tar.gz and ${NAME}.sources.json"
+# and the kept files themselves beside it: a release is bundled on another machine, whose cache doesn't have them
+rm -rf "${OUT}/${NAME}.sources"
+jq -r '.ffmpeg.file, .libraries[].file' "${OUT}/${NAME}.sources.json" | while read -r kept; do
+  mkdir -p "$(dirname "${OUT}/${NAME}.sources/${kept}")"
+  cp "${SOURCES}/${kept}" "${OUT}/${NAME}.sources/${kept}"
+done
+step "done: ${NAME}.tar.gz, ${NAME}-dev.tar.gz, ${NAME}.sources.json and the sources in ${NAME}.sources/"

@@ -46,6 +46,8 @@ export interface FakeGitHub {
   requests: { path: string; auth: boolean }[];
   base: string;
   env: Record<string, string>;
+  /** What GET /repos/o/r says about visibility. */
+  private: boolean;
   /** Publishes a release whose manifest lists the targets (their archives are made up unless given). */
   publish(tag: string, targets: FakeTarget[], extra?: Partial<FakeRelease> & { engine?: string }): Manifest;
   close(): Promise<void>;
@@ -71,6 +73,7 @@ export async function fakeGitHub(): Promise<FakeGitHub> {
       tag_name: r.tag, draft: r.draft ?? false, prerelease: r.prerelease ?? false,
       assets: Object.keys(r.files).map((name) => ({ name, url: `${base}/assets/${encodeURIComponent(r.tag)}/${encodeURIComponent(name)}` })),
     });
+    if (url.pathname === '/repos/o/r') return send(200, { full_name: 'o/r', private: fake.private });
     let m = /^\/repos\/o\/r\/releases\/tags\/(.+)$/.exec(url.pathname);
     if (m) {
       const r = fake.releases.find((x) => x.tag === decodeURIComponent(m![1]!));
@@ -99,6 +102,7 @@ export async function fakeGitHub(): Promise<FakeGitHub> {
     requests,
     base,
     env: { FFMPEG_BUILD_GITHUB_API: base },
+    private: false,
     publish(tag, targets, extra = {}) {
       const t = /^(?:(.+)-)?(\d+\.\d+(?:\.\d+)?)\.(\d+)$/.exec(tag)!;
       const files: Record<string, Buffer> = {};
