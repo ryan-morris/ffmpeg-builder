@@ -73,17 +73,37 @@ function builtTarget(dist: string, p: PlannedTarget): { runtime: string; dev: st
 }
 
 /** The release's sources archive: every kept source once, the build definition, and the engine files it used. */
-async function writeSources(out: string, root: string, folder: Folder, rel: PlannedRelease, built: Map<string, SourcesJson>, data: EngineData, engineRoot: string, dist: string): Promise<void> {
-  const entries: TarEntry[] = [];
-  const seen = new Map<string, string>();
+/**
+ * Where each kept source goes in the sources archive. A file each build used is kept once; the same name with other
+ * bytes (a git commit archived by another machine's tar and gzip) goes beside it under its sha256's first 12 digits,
+ * so every build's exact source is there.
+ */
+function archivedPaths(rel: PlannedRelease, built: Map<string, SourcesJson>): Map<string, string> {
+  const byName = new Map<string, string>(); // file -> the sha256 that got the plain path
+  const at = new Map<string, string>(); // file\0sha256 -> path in the archive
   for (const p of rel.targets) {
     const s = built.get(p.target.name)!;
     for (const r of [s.ffmpeg, ...s.libraries]) {
-      const was = seen.get(r.file);
-      if (was && was !== r.sha256) throw new BundleError(`two builds kept different files as ${r.file}; build them again from one cache`);
-      if (was) continue;
-      seen.set(r.file, r.sha256);
-      entries.push({ path: `${root}/sources/${r.file}`, file: join(dist, `${s.artifact}.sources`, r.file) });
+      const key = `${r.file}\0${r.sha256}`;
+      if (at.has(key)) continue;
+      const first = byName.get(r.file);
+      if (!first) byName.set(r.file, r.sha256);
+      const dir = r.file.includes('/') ? r.file.slice(0, r.file.lastIndexOf('/')) : '.';
+      at.set(key, !first ? `sources/${r.file}` : `sources/${dir}/${r.sha256.slice(0, 12)}/${basename(r.file)}`);
+    }
+  }
+  return at;
+}
+
+async function writeSources(out: string, root: string, folder: Folder, rel: PlannedRelease, built: Map<string, SourcesJson>, data: EngineData, engineRoot: string, dist: string): Promise<void> {
+  const archived = archivedPaths(rel, built);
+  const entries: TarEntry[] = [];
+  for (const p of rel.targets) {
+    const s = built.get(p.target.name)!;
+    for (const r of [s.ffmpeg, ...s.libraries]) {
+      const at = archived.get(`${r.file}\0${r.sha256}`)!;
+      if (entries.some((e) => e.path === `${root}/${at}`)) continue;
+      entries.push({ path: `${root}/${at}`, file: join(dist, `${s.artifact}.sources`, r.file) });
     }
   }
   // the build definition: the folder's file and lock, and the patch sets the targets apply
@@ -105,11 +125,11 @@ async function writeSources(out: string, root: string, folder: Folder, rel: Plan
     const from = f.startsWith('recipes/') ? join(data.root, f) : join(engineRoot, f);
     if (existsSync(from)) entries.push({ path: `${root}/engine/${f}`, file: from });
   }
-  entries.push({ path: `${root}/SOURCES.md`, text: sourcesIndex(rel, built) });
+  entries.push({ path: `${root}/SOURCES.md`, text: sourcesIndex(rel, built, archived) });
   await writeTarGz(out, entries);
 }
 
-function sourcesIndex(rel: PlannedRelease, built: Map<string, SourcesJson>): string {
+function sourcesIndex(rel: PlannedRelease, built: Map<string, SourcesJson>, archived: Map<string, string>): string {
   const out = [
     `# Sources of FFmpeg ${rel.ffmpeg}${rel.group ? ` (${rel.group})` : ''}`,
     '',
@@ -124,7 +144,7 @@ function sourcesIndex(rel: PlannedRelease, built: Map<string, SourcesJson>): str
   for (const p of rel.targets) {
     const s = built.get(p.target.name)!;
     out.push('', `## ${p.target.name}`, '', '| component | version | origin | commit | file | sha256 |', '|---|---|---|---|---|---|');
-    for (const r of [s.ffmpeg, ...s.libraries]) out.push(`| ${r.name} | ${r.version} | ${r.origin} | ${r.commit ?? ''} | sources/${r.file} | ${r.sha256} |`);
+    for (const r of [s.ffmpeg, ...s.libraries]) out.push(`| ${r.name} | ${r.version} | ${r.origin} | ${r.commit ?? ''} | ${archived.get(`${r.file}\0${r.sha256}`)} | ${r.sha256} |`);
     if (s.patches.length) out.push('', `Patch sets: ${s.patches.map((x) => `${x.name} (sha256 ${x.sha256})`).join(', ')}`);
   }
   return `${out.join('\n')}\n`;

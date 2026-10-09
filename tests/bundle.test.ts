@@ -121,6 +121,25 @@ describe('ffmpeg-build bundle', () => {
     await expect(bundle(stale.folder, data, LOCK, { tag: '9.1.0.0', dist: stale.dist, engineRoot: packageRoot })).rejects.toThrow('was built from other versions than ffmpeg.lock says (dav1d 1.5.4)');
   });
 
+  it("keeps both when two machines kept the same source as different bytes (another tar and gzip), each build's own", async () => {
+    const { dist, folder } = builtFolder();
+    const gpl = 'ffmpeg-9.1.0-linux-x64-gplv3';
+    const json = JSON.parse(readFileSync(join(dist, `${gpl}.sources.json`), 'utf8'));
+    const dav1d = json.libraries.find((l: { name: string }) => l.name === 'dav1d');
+    writeFileSync(join(dist, `${gpl}.sources`, dav1d.file), 'the same commit, archived elsewhere');
+    dav1d.sha256 = sha(Buffer.from('the same commit, archived elsewhere'));
+    writeFileSync(join(dist, `${gpl}.sources.json`), JSON.stringify(json));
+    await bundle(folder, data, LOCK, { tag: '9.1.0.0', dist, engineRoot: packageRoot });
+    const entries = readTarGz(readFileSync(join(dist, 'ffmpeg-9.1.0-sources.tar.gz')));
+    const kept = entries.filter((e) => e.name.endsWith('dav1d-1.5.4.tar.gz')).map((e) => [e.name, e.data.toString()]);
+    expect(kept).toEqual([
+      ['ffmpeg-9.1.0-sources/sources/dav1d/dav1d-1.5.4.tar.gz', 'dav1d 1.5.4 source'],
+      [`ffmpeg-9.1.0-sources/sources/dav1d/${dav1d.sha256.slice(0, 12)}/dav1d-1.5.4.tar.gz`, 'the same commit, archived elsewhere'],
+    ]);
+    const index = entries.find((e) => e.name.endsWith('SOURCES.md'))!.data.toString();
+    expect(index).toContain(`| sources/dav1d/${dav1d.sha256.slice(0, 12)}/dav1d-1.5.4.tar.gz | ${dav1d.sha256} |`);
+  });
+
   it('names the release a tag must match', async () => {
     const { dist, folder } = builtFolder();
     await expect(bundle(folder, data, LOCK, { tag: '9.0.2.1', dist, engineRoot: packageRoot })).rejects.toThrow('no release 9.0.2 in this folder (it has 9.1.0)');
